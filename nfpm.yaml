@@ -1,0 +1,32 @@
+# nfpm packaging config for tgcurl — produces .rpm and .deb from the
+# prebuilt static binary. See https://nfpm.goreleaser.com/configuration/
+#
+# Driven by the Makefile `release` target, which sets VERSION and BIN.
+name: tgcurl
+arch: amd64
+platform: linux
+version: ${VERSION}
+section: net
+priority: optional
+maintainer: Blokhin Dmitriy <dblokhin79@gmail.com>
+description: |
+  curl for Telegram — a deterministic, JSON-only command-line client for a
+  personal Telegram account (not a bot), built on Telegram's official TDLib.
+  Designed to be driven by scripts and AI agents.
+vendor: Blokhin Dmitriy
+homepage: https://github.com/dblokhin/tgcurl
+license: MIT
+
+contents:
+  - src: ${BIN}
+    dst: /usr/bin/tgcurl
+    file_info:
+      mode: 0755
+  - src: ./LICENSE
+    dst: /usr/share/doc/tgcurl/LICENSE
+  - src: ./README.md
+    dst: /usr/share/doc/tgcurl/README.md
+
+# The static binary bundles TDLib/OpenSSL/zlib/libstdc++; only glibc is a
+# runtime dependency, which every target distro already provides. So we
+# intentionally declare no package dependencies.
