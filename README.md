@@ -161,19 +161,23 @@ exit=1
 **Prerequisites** (installed by `make deps`): a C++17 compiler (GCC ≥ 7 / Clang ≥ 5), CMake ≥
 3.10, gperf, and the OpenSSL and zlib development headers.
 
-**TDLib** must also be available. Pick one:
+**TDLib** must also be available; the project's CMake finds it via `find_package(Td)`.
 
-1. **System-installed TDLib** — build and `make install` [tdlib/td](https://github.com/tdlib/td)
-   once; the project's CMake finds it via `find_package(Td)`. Simplest for local development.
-2. **Vendored / from-source** — build TDLib as part of the project (static linking) to produce
-   a fully self-contained binary. This is what `make static` and `make release` target. Note
-   that compiling TDLib from source is heavy (a long C++ build).
+- **Fedora (recommended, and what this project builds against):** TDLib is packaged —
+  `sudo dnf install tdlib-devel tdlib-static` (currently 1.8.0). No source build needed;
+  `make static` links `Td::TdStatic` from `tdlib-static`.
+- **Other distros / newer TDLib:** build [tdlib/td](https://github.com/tdlib/td) from source and
+  `make install` it once. Compiling TDLib from source is heavy (a long C++ build).
+
+> Built and tested against **TDLib 1.8.0** (Fedora package). The `td_api` calls used here
+> (auth, `getContacts`, `getChats`, `searchPublicChat`, `getChatHistory`, `sendMessage`) are
+> stable across recent versions.
 
 ### Make targets
 
 | Target          | What it does                                                              |
 |-----------------|---------------------------------------------------------------------------|
-| `make deps`     | Install build prerequisites (auto-detects `dnf` / `apt`).                  |
+| `make deps`     | Install build + dev tooling (clang-tools, cppcheck, valgrind, ninja, ccache; auto-detects `dnf` / `apt`). Install TDLib separately (see above). |
 | `make build`    | Configure + compile into `build/tgcurl`. `BUILD_TYPE=Debug` for a debug build. |
 | `make static`   | Build a self-contained binary (bundled TDLib/OpenSSL/zlib/libstdc++), then print its `ldd`. |
 | `make test`     | Run the test suite via `ctest`.                                           |
