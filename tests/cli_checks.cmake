@@ -9,10 +9,13 @@
 #                      runs never block waiting on stdin).
 #   logout_noconfig  - `logout` with an empty config dir prints {"ok":true} and
 #                      exits 0 (nothing to log out of; db cleared).
+#   chats_bad_limit  - `chats list --limit abc` -> usage error before any
+#                      network (arg validation runs first).
+#   contacts_bad_sub - `contacts frobnicate` -> usage error.
 
 # Auth modes run against a throwaway, empty config directory so they never
 # touch a real session and start from a known "no config" state.
-if(MODE MATCHES "^(login_headless|logout_noconfig)$")
+if(MODE MATCHES "^(login_headless|logout_noconfig|chats_bad_limit|contacts_bad_sub)$")
   set(SCRATCH "${CMAKE_CURRENT_BINARY_DIR}/cli_scratch_${MODE}")
   file(REMOVE_RECURSE "${SCRATCH}")
   set(ENV{TGCURL_CONFIG_DIR} "${SCRATCH}")
@@ -24,6 +27,10 @@ elseif(MODE STREQUAL "login_headless")
   set(ARGS "login")
 elseif(MODE STREQUAL "logout_noconfig")
   set(ARGS "logout")
+elseif(MODE STREQUAL "chats_bad_limit")
+  set(ARGS "chats;list;--limit;abc")
+elseif(MODE STREQUAL "contacts_bad_sub")
+  set(ARGS "contacts;frobnicate")
 else() # usage: no args
   set(ARGS "")
 endif()

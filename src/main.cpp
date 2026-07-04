@@ -65,14 +65,9 @@ int run(const Args& argv) {
 } // namespace tgcurl
 
 // --- Command stubs (temporary; replaced in later issues) --------------------
-// login / logout are implemented in src/commands/auth_cmds.cpp (issue #5).
+// login / logout        -> src/commands/auth_cmds.cpp (issue #5)
+// contacts list / chats -> src/commands/{contacts,chats}.cpp (issue #6)
 namespace tgcurl::commands {
-std::optional<Error> contacts(const Args& /*args*/) {
-    return Error("not_implemented", "contacts: see issue #6");
-}
-std::optional<Error> chats(const Args& /*args*/) {
-    return Error("not_implemented", "chats: see issue #6");
-}
 std::optional<Error> chat(const Args& /*args*/) {
     return Error("not_implemented", "chat: see issue #7");
 }
