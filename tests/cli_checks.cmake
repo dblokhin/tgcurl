@@ -12,10 +12,13 @@
 #   chats_bad_limit  - `chats list --limit abc` -> usage error before any
 #                      network (arg validation runs first).
 #   contacts_bad_sub - `contacts frobnicate` -> usage error.
+#   send_unresolvable- `send "John Smith" "x"` -> unresolvable error before any
+#                      network (a free-text name can't be addressed).
+#   chat_unresolvable- `chat "John Smith"` -> unresolvable error.
 
 # Auth modes run against a throwaway, empty config directory so they never
 # touch a real session and start from a known "no config" state.
-if(MODE MATCHES "^(login_headless|logout_noconfig|chats_bad_limit|contacts_bad_sub)$")
+if(MODE MATCHES "^(login_headless|logout_noconfig|chats_bad_limit|contacts_bad_sub|send_unresolvable|chat_unresolvable)$")
   set(SCRATCH "${CMAKE_CURRENT_BINARY_DIR}/cli_scratch_${MODE}")
   file(REMOVE_RECURSE "${SCRATCH}")
   set(ENV{TGCURL_CONFIG_DIR} "${SCRATCH}")
@@ -31,6 +34,10 @@ elseif(MODE STREQUAL "chats_bad_limit")
   set(ARGS "chats;list;--limit;abc")
 elseif(MODE STREQUAL "contacts_bad_sub")
   set(ARGS "contacts;frobnicate")
+elseif(MODE STREQUAL "send_unresolvable")
+  set(ARGS "send;John Smith;hello")
+elseif(MODE STREQUAL "chat_unresolvable")
+  set(ARGS "chat;John Smith")
 else() # usage: no args
   set(ARGS "")
 endif()
@@ -66,4 +73,12 @@ endif()
 
 if(NOT err MATCHES "\"error\"")
   message(FATAL_ERROR "expected a JSON error on stderr (mode=${MODE}); got: ${err}")
+endif()
+
+# The unresolvable modes must fail specifically with that error code, proving
+# arg validation runs before (and independently of) any session.
+if(MODE MATCHES "unresolvable")
+  if(NOT err MATCHES "unresolvable")
+    message(FATAL_ERROR "expected an 'unresolvable' error (mode=${MODE}); got: ${err}")
+  endif()
 endif()

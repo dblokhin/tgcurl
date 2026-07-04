@@ -64,17 +64,11 @@ int run(const Args& argv) {
 } // namespace
 } // namespace tgcurl
 
-// --- Command stubs (temporary; replaced in later issues) --------------------
-// login / logout        -> src/commands/auth_cmds.cpp (issue #5)
-// contacts list / chats -> src/commands/{contacts,chats}.cpp (issue #6)
-namespace tgcurl::commands {
-std::optional<Error> chat(const Args& /*args*/) {
-    return Error("not_implemented", "chat: see issue #7");
-}
-std::optional<Error> send(const Args& /*args*/) {
-    return Error("not_implemented", "send: see issue #7");
-}
-} // namespace tgcurl::commands
+// All commands are implemented under src/commands/*:
+//   login / logout          -> auth_cmds.cpp
+//   contacts list           -> contacts.cpp
+//   chats list              -> chats.cpp
+//   chat / send             -> chat.cpp / send.cpp
 
 int main(int argc, char** argv) {
     // Collect argv[1..] as the command + its arguments. Index-based to avoid

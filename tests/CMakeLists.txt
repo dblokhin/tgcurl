@@ -19,6 +19,11 @@ add_executable(test_auth test_auth.cpp)
 target_link_libraries(test_auth PRIVATE tgcurl_td)
 add_test(NAME auth COMMAND test_auth)
 
+# resolve's pure classify() (searchPublicChat is network-dependent).
+add_executable(test_resolve test_resolve.cpp)
+target_link_libraries(test_resolve PRIVATE tgcurl_td)
+add_test(NAME resolve COMMAND test_resolve)
+
 # --- CLI-level dispatch checks (exercise the real binary) -------------------
 # Unknown subcommand -> non-zero exit and a JSON error on stderr.
 add_test(NAME cli_unknown_command
@@ -63,5 +68,21 @@ add_test(NAME cli_contacts_bad_sub
   COMMAND ${CMAKE_COMMAND}
     -DTGCURL=$<TARGET_FILE:tgcurl>
     -DMODE=contacts_bad_sub
+    -DCMAKE_CURRENT_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_checks.cmake)
+
+# send with a free-text name -> unresolvable, before any network.
+add_test(NAME cli_send_unresolvable
+  COMMAND ${CMAKE_COMMAND}
+    -DTGCURL=$<TARGET_FILE:tgcurl>
+    -DMODE=send_unresolvable
+    -DCMAKE_CURRENT_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_checks.cmake)
+
+# chat with a free-text name -> unresolvable.
+add_test(NAME cli_chat_unresolvable
+  COMMAND ${CMAKE_COMMAND}
+    -DTGCURL=$<TARGET_FILE:tgcurl>
+    -DMODE=chat_unresolvable
     -DCMAKE_CURRENT_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
     -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_checks.cmake)

@@ -39,9 +39,12 @@ add_library(tgcurl_td
   src/tdclient.cpp
   src/auth.cpp
   src/session.cpp
+  src/resolve.cpp
   src/commands/auth_cmds.cpp
   src/commands/contacts.cpp
   src/commands/chats.cpp
+  src/commands/chat.cpp
+  src/commands/send.cpp
 )
 target_link_libraries(tgcurl_td PUBLIC tgcurl_core PRIVATE Td::TdStatic)
 # Propagate only TDLib's include directories (not the link) to consumers.
