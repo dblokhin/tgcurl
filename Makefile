@@ -151,10 +151,14 @@ uninstall:
 	fi
 
 # ----------------------------------------------------------------------------
-# Release: static binary -> .rpm + .deb via nfpm
+# Release: dynamically-linked binary -> .rpm + .deb via nfpm
 # ----------------------------------------------------------------------------
 # nfpm produces both rpm and deb from one prebuilt binary, on any host, with no
 # rpmbuild/dpkg toolchains required. See https://nfpm.goreleaser.com/
+#
+# The binary links TDLib dynamically (Fedora ships no static TDLib client
+# archive), so the packages declare their runtime deps in nfpm.yaml rather than
+# bundling them. We package the ordinary `build` output, not `static`.
 NFPM ?= nfpm
 
 check-tools:
@@ -168,11 +172,11 @@ release: rpm deb
 	@echo ">> Packages in $(DIST_DIR)/:"
 	@ls -1 $(DIST_DIR)/*.rpm $(DIST_DIR)/*.deb 2>/dev/null || true
 
-rpm: static check-tools
+rpm: build check-tools
 	@mkdir -p $(DIST_DIR)
 	VERSION=$(VERSION) BIN=$(BIN) $(NFPM) pkg --config nfpm.yaml --packager rpm --target $(DIST_DIR)/
 
-deb: static check-tools
+deb: build check-tools
 	@mkdir -p $(DIST_DIR)
 	VERSION=$(VERSION) BIN=$(BIN) $(NFPM) pkg --config nfpm.yaml --packager deb --target $(DIST_DIR)/
 

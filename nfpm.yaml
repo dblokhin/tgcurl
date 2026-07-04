@@ -1,5 +1,5 @@
 # nfpm packaging config for tgcurl — produces .rpm and .deb from the
-# prebuilt static binary. See https://nfpm.goreleaser.com/configuration/
+# prebuilt (dynamically linked) binary. See https://nfpm.goreleaser.com/configuration/
 #
 # Driven by the Makefile `release` target, which sets VERSION and BIN.
 name: tgcurl
@@ -27,6 +27,23 @@ contents:
   - src: ./README.md
     dst: /usr/share/doc/tgcurl/README.md
 
-# The static binary bundles TDLib/OpenSSL/zlib/libstdc++; only glibc is a
-# runtime dependency, which every target distro already provides. So we
-# intentionally declare no package dependencies.
+# The binary links TDLib, OpenSSL, zlib and libstdc++ dynamically (Fedora's
+# tdlib package ships only shared libs — there is no static TDLib client
+# archive to bundle). So the package must pull those runtimes in on install.
+# Package names differ between RPM and DEB worlds, so declare each per-packager.
+overrides:
+  rpm:
+    depends:
+      - tdlib          # provides libtdclient.so / libtdapi.so
+      - openssl-libs   # libssl.so.3 / libcrypto.so.3
+      - zlib-ng-compat # libz.so.1 (Fedora 40+; older Fedora: zlib)
+      - libstdc++      # libstdc++.so.6
+  deb:
+    depends:
+      - libssl3        # libssl.so.3 / libcrypto.so.3
+      - zlib1g         # libz.so.1
+      - libstdc++6     # libstdc++.so.6
+    # NOTE: Debian/Ubuntu have no standard TDLib runtime package. On those
+    # systems TDLib must be installed separately (distro package if available,
+    # or built from source). We therefore do not name a TDLib dependency here;
+    # revisit if targeting a distro that packages it.
