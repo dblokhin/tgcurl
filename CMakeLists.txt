@@ -22,6 +22,7 @@ find_package(Td 1.8.0 REQUIRED)
 # Td here — anything touching TDLib belongs in tgcurl_td below.
 add_library(tgcurl_core
   src/tgcurl_version.cpp
+  src/config.cpp
 )
 target_include_directories(tgcurl_core PUBLIC src)
 target_compile_definitions(tgcurl_core PUBLIC TGCURL_VERSION="${TGCURL_VERSION}")

@@ -4,6 +4,11 @@ add_executable(test_json_out test_json_out.cpp)
 target_link_libraries(test_json_out PRIVATE tgcurl_core)
 add_test(NAME json_out COMMAND test_json_out)
 
+# config is pure logic (no TDLib); links the core library.
+add_executable(test_config test_config.cpp)
+target_link_libraries(test_config PRIVATE tgcurl_core)
+add_test(NAME config COMMAND test_config)
+
 # tdclient touches TDLib, so this test links the TD-backed library.
 add_executable(test_tdclient test_tdclient.cpp)
 target_link_libraries(test_tdclient PRIVATE tgcurl_td)
