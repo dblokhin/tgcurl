@@ -27,12 +27,22 @@ target_include_directories(tgcurl_core PUBLIC src)
 target_compile_definitions(tgcurl_core PUBLIC TGCURL_VERSION="${TGCURL_VERSION}")
 
 # ---- TDLib-backed layer ----------------------------------------------------
-# The tdclient wrapper (issue #3), auth, and command bodies land here; this is
-# the only target that links TDLib, and it links it PRIVATE.
+# The tdclient wrapper (issue #3), auth, and command bodies land here. This is
+# the only target that *links* the TDLib archive, and it links it PRIVATE so
+# the archive isn't forced onto other consumers. But tgcurl_td's public headers
+# (tdclient.h) include <td/telegram/...>, so consumers must see TDLib's include
+# dirs: we re-expose them PUBLIC via an INTERFACE, while the heavy archive link
+# stays PRIVATE. On a vendored/non-default-path TDLib this is what keeps
+# `#include "tdclient.h"` compiling for main.cpp and the command TUs.
 add_library(tgcurl_td
-  src/td_placeholder.cpp
+  src/tdclient.cpp
 )
 target_link_libraries(tgcurl_td PUBLIC tgcurl_core PRIVATE Td::TdStatic)
+# Propagate only TDLib's include directories (not the link) to consumers.
+get_target_property(_td_inc Td::TdStatic INTERFACE_INCLUDE_DIRECTORIES)
+if(_td_inc)
+  target_include_directories(tgcurl_td PUBLIC ${_td_inc})
+endif()
 
 # ---- Executable ------------------------------------------------------------
 add_executable(tgcurl src/main.cpp)
