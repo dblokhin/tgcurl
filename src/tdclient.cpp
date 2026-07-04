@@ -15,6 +15,11 @@ namespace {
 // can tell it apart from a genuine TDLib error.
 constexpr std::int32_t kTimeoutErrorCode = -1000;
 
+// Upper bound on how long the destructor waits for a graceful close (databases
+// flushed) before giving up so process exit can't hang. A local flush completes
+// in well under this; the cap only guards a wedged/offline shutdown.
+constexpr double kCloseTimeoutSeconds = 5.0;
+
 // Quiet TDLib's logger. By default TDLib floods stderr with verbose logs, which
 // would bury the interactive login prompts (also on stderr, since stdout is
 // JSON-only). Level 0 = fatal-only. Setting TGCURL_DEBUG to any non-empty value
@@ -36,7 +41,45 @@ TdClient::TdClient() : manager_(std::make_unique<td::ClientManager>()) {
     client_id_ = manager_->create_client_id();
 }
 
-TdClient::~TdClient() = default;
+TdClient::~TdClient() {
+    // TDLib flushes its databases to disk only on a graceful close: it persists
+    // use_chat_info_database (the peer cache that keeps a chat_id usable across
+    // runs) when it receives `close` and finishes shutting down. Just dropping
+    // the ClientManager would exit before that flush, silently losing everything
+    // written this run. So request close and pump events until TDLib reports
+    // authorizationStateClosed — the documented "databases flushed, safe to
+    // exit" signal (see tdlib td_example.cpp). Bounded by a timeout and fully
+    // exception-safe: a destructor must never throw or hang the process.
+    try {
+        manager_->send(client_id_, next_request_id_++, td_api::make_object<td_api::close>());
+        const auto deadline =
+            std::chrono::steady_clock::now() + std::chrono::duration<double>(kCloseTimeoutSeconds);
+        while (std::chrono::steady_clock::now() < deadline) {
+            const double remaining =
+                std::chrono::duration<double>(deadline - std::chrono::steady_clock::now()).count();
+            auto response = manager_->receive(remaining);
+            if (response.object == nullptr) {
+                continue;
+            }
+            // The close-complete signal is an updateAuthorizationState update
+            // (request_id == 0) carrying authorizationStateClosed.
+            if (response.request_id == 0 &&
+                response.object->get_id() == td_api::updateAuthorizationState::ID) {
+                // Safe downcast: get_id() matched updateAuthorizationState.
+                // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+                const auto* upd =
+                    static_cast<const td_api::updateAuthorizationState*>(response.object.get());
+                if (upd->authorization_state_ != nullptr &&
+                    upd->authorization_state_->get_id() == td_api::authorizationStateClosed::ID) {
+                    break;
+                }
+            }
+        }
+        // NOLINTNEXTLINE(bugprone-empty-catch)
+    } catch (...) {
+        // Best-effort flush; never let shutdown throw out of a destructor.
+    }
+}
 
 void TdClient::set_update_handler(UpdateHandler handler) {
     update_handler_ = std::move(handler);
