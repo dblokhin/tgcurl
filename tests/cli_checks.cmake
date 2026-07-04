@@ -17,13 +17,24 @@
 #   chat_unresolvable- `chat "John Smith"` -> unresolvable error.
 #   contacts_new_bad - `contacts new` (missing args) -> usage error pre-network.
 #   contacts_block_unresolvable - `contacts block "John Smith"` -> unresolvable.
+#   login_quiet      - `login` with a seeded (fake) config so TdClient is
+#                      constructed and the flow reaches the phone prompt; asserts
+#                      stderr carries NO TDLib logs (they are silenced by
+#                      default, otherwise they'd bury the prompts).
 
 # Auth modes run against a throwaway, empty config directory so they never
 # touch a real session and start from a known "no config" state.
-if(MODE MATCHES "^(login_headless|logout_noconfig|chats_bad_limit|contacts_bad_sub|send_unresolvable|chat_unresolvable|contacts_new_bad|contacts_block_unresolvable)$")
+if(MODE MATCHES "^(login_headless|logout_noconfig|chats_bad_limit|contacts_bad_sub|send_unresolvable|chat_unresolvable|contacts_new_bad|contacts_block_unresolvable|login_quiet)$")
   set(SCRATCH "${CMAKE_CURRENT_BINARY_DIR}/cli_scratch_${MODE}")
   file(REMOVE_RECURSE "${SCRATCH}")
   set(ENV{TGCURL_CONFIG_DIR} "${SCRATCH}")
+endif()
+
+# login_quiet needs a config so login gets past api_id/api_hash and actually
+# spins up TDLib (which is where the log noise would come from). Seed a fake one.
+if(MODE STREQUAL "login_quiet")
+  file(MAKE_DIRECTORY "${SCRATCH}")
+  file(WRITE "${SCRATCH}/config.json" "{\"api_id\": 12345678, \"api_hash\": \"abcdef0123456789abcdef0123456789\"}")
 endif()
 
 if(MODE STREQUAL "unknown")
@@ -44,6 +55,8 @@ elseif(MODE STREQUAL "contacts_new_bad")
   set(ARGS "contacts;new")
 elseif(MODE STREQUAL "contacts_block_unresolvable")
   set(ARGS "contacts;block;John Smith")
+elseif(MODE STREQUAL "login_quiet")
+  set(ARGS "login")
 else() # usage: no args
   set(ARGS "")
 endif()
@@ -86,5 +99,18 @@ endif()
 if(MODE MATCHES "unresolvable")
   if(NOT err MATCHES "unresolvable")
     message(FATAL_ERROR "expected an 'unresolvable' error (mode=${MODE}); got: ${err}")
+  endif()
+endif()
+
+# login_quiet: TDLib is constructed but its logs must be silenced by default,
+# so the interactive prompts (also on stderr) stay visible. Assert no TDLib log
+# markers leaked onto stderr.
+if(MODE STREQUAL "login_quiet")
+  if(err MATCHES "Td\\.cpp" OR err MATCHES "Client\\.cpp" OR err MATCHES "td_requests")
+    message(FATAL_ERROR "TDLib logs leaked onto stderr (should be silenced); got: ${err}")
+  endif()
+  # And the phone prompt should be present (proves we reached the auth flow).
+  if(NOT err MATCHES "Phone number")
+    message(FATAL_ERROR "expected the phone-number prompt on stderr; got: ${err}")
   endif()
 endif()

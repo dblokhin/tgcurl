@@ -47,6 +47,15 @@ add_test(NAME cli_login_headless
     -DCMAKE_CURRENT_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
     -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_checks.cmake)
 
+# login with a seeded config reaches the phone prompt with TDLib logs silenced
+# (they must not bury the prompt). Guards the log-verbosity fix.
+add_test(NAME cli_login_quiet
+  COMMAND ${CMAKE_COMMAND}
+    -DTGCURL=$<TARGET_FILE:tgcurl>
+    -DMODE=login_quiet
+    -DCMAKE_CURRENT_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_checks.cmake)
+
 # logout with empty config -> {"ok":true}, exit 0.
 add_test(NAME cli_logout_noconfig
   COMMAND ${CMAKE_COMMAND}

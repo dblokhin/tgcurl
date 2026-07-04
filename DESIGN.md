@@ -87,6 +87,13 @@ wrappers exploit this:
   `not_authorized`; the user re-runs `login`, which re-enters the flow. `logout` sends `logOut`
   and clears the database directory.
 
+**Logging & stream discipline.** TDLib is verbose by default and writes its log to **stderr** —
+the same stream the interactive `login` prompts use (stdout is reserved for the JSON result, so
+it stays pipe-clean for `jq`). Left alone, the log buries the phone/code prompts and the user
+never sees them. So on client init we call `setLogVerbosityLevel(0)` (fatal-only) to keep stderr
+clean; setting `TGCURL_DEBUG` to any non-empty value restores a verbose trace for debugging.
+Rule of thumb: **stdout = JSON only; prompts and logs = stderr.**
+
 ---
 
 ## Peer identification — `chat_id` is primary

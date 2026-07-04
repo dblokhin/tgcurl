@@ -1,6 +1,7 @@
 #include "tdclient.h"
 
 #include <chrono>
+#include <cstdlib>
 #include <string>
 #include <utility>
 
@@ -13,9 +14,23 @@ namespace {
 // are positive HTTP-like codes). Distinctive so a caller switching on code_
 // can tell it apart from a genuine TDLib error.
 constexpr std::int32_t kTimeoutErrorCode = -1000;
+
+// Quiet TDLib's logger. By default TDLib floods stderr with verbose logs, which
+// would bury the interactive login prompts (also on stderr, since stdout is
+// JSON-only). Level 0 = fatal-only. Setting TGCURL_DEBUG to any non-empty value
+// restores a verbose trace (level 5) for debugging.
+void configure_tdlib_logging() {
+    std::int32_t level = 0;
+    if (const char* dbg = std::getenv("TGCURL_DEBUG"); dbg != nullptr && *dbg != '\0') {
+        level = 5;
+    }
+    // execute() is a static, synchronous call — usable before any client exists.
+    td::ClientManager::execute(td_api::make_object<td_api::setLogVerbosityLevel>(level));
+}
 } // namespace
 
 TdClient::TdClient() : manager_(std::make_unique<td::ClientManager>()) {
+    configure_tdlib_logging();
     // Can't use a member initializer: create_client_id() needs manager_ built.
     // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer)
     client_id_ = manager_->create_client_id();
