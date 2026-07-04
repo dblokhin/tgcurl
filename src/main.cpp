@@ -5,7 +5,6 @@
 // commands are implemented in src/commands/*; at this scaffold stage they are
 // stubs returning `not_implemented`.
 #include "error.h"
-#include "json_out.h"
 
 #include <functional>
 #include <iostream>
@@ -21,13 +20,14 @@ namespace tgcurl {
 using Args = std::vector<std::string>;
 
 namespace commands {
-// Stubs for now; each is implemented under its own issue.
-std::optional<Error> login(const Args&);
-std::optional<Error> logout(const Args&);
-std::optional<Error> contacts(const Args&);
-std::optional<Error> chats(const Args&);
-std::optional<Error> chat(const Args&);
-std::optional<Error> send(const Args&);
+// login / logout live in src/commands/auth_cmds.cpp; the rest are stubs until
+// their issue lands.
+std::optional<Error> login(const Args& args);
+std::optional<Error> logout(const Args& args);
+std::optional<Error> contacts(const Args& args);
+std::optional<Error> chats(const Args& args);
+std::optional<Error> chat(const Args& args);
+std::optional<Error> send(const Args& args);
 } // namespace commands
 
 namespace {
@@ -65,28 +65,30 @@ int run(const Args& argv) {
 } // namespace tgcurl
 
 // --- Command stubs (temporary; replaced in later issues) --------------------
+// login / logout are implemented in src/commands/auth_cmds.cpp (issue #5).
 namespace tgcurl::commands {
-std::optional<Error> login(const Args&) {
-    return Error("not_implemented", "login: see issue #5");
-}
-std::optional<Error> logout(const Args&) {
-    return Error("not_implemented", "logout: see issue #5");
-}
-std::optional<Error> contacts(const Args&) {
+std::optional<Error> contacts(const Args& /*args*/) {
     return Error("not_implemented", "contacts: see issue #6");
 }
-std::optional<Error> chats(const Args&) {
+std::optional<Error> chats(const Args& /*args*/) {
     return Error("not_implemented", "chats: see issue #6");
 }
-std::optional<Error> chat(const Args&) {
+std::optional<Error> chat(const Args& /*args*/) {
     return Error("not_implemented", "chat: see issue #7");
 }
-std::optional<Error> send(const Args&) {
+std::optional<Error> send(const Args& /*args*/) {
     return Error("not_implemented", "send: see issue #7");
 }
 } // namespace tgcurl::commands
 
 int main(int argc, char** argv) {
-    tgcurl::Args args(argv + (argc > 0 ? 1 : 0), argv + argc);
+    // Collect argv[1..] as the command + its arguments. Index-based to avoid
+    // raw pointer arithmetic; argv[0] (the program name) is skipped.
+    tgcurl::Args args;
+    for (int i = 1; i < argc; ++i) {
+        // argv indexing at the C boundary; bounded by argc.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+        args.emplace_back(argv[i]);
+    }
     return tgcurl::run(args);
 }

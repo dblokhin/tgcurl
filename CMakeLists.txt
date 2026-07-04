@@ -37,6 +37,8 @@ target_compile_definitions(tgcurl_core PUBLIC TGCURL_VERSION="${TGCURL_VERSION}"
 # `#include "tdclient.h"` compiling for main.cpp and the command TUs.
 add_library(tgcurl_td
   src/tdclient.cpp
+  src/auth.cpp
+  src/commands/auth_cmds.cpp
 )
 target_link_libraries(tgcurl_td PUBLIC tgcurl_core PRIVATE Td::TdStatic)
 # Propagate only TDLib's include directories (not the link) to consumers.
