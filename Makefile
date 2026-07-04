@@ -31,7 +31,8 @@ CMAKE_FLAGS ?=
 # Phony targets
 # ----------------------------------------------------------------------------
 .PHONY: all help deps configure build static test clean distclean \
-        install uninstall release rpm deb check-tools version
+        install uninstall release rpm deb check-tools version \
+        format format-check lint tidy
 
 all: build
 
@@ -47,6 +48,10 @@ help:
 	@echo "  rpm / deb  Produce a single package format"
 	@echo "  clean      Remove build artifacts"
 	@echo "  distclean  Remove build/ and dist/ entirely"
+	@echo "  format     Reformat sources in place (clang-format)"
+	@echo "  format-check  Check formatting without editing (CI-friendly)"
+	@echo "  tidy       Run clang-tidy over the sources"
+	@echo "  lint       Run cppcheck static analysis"
 	@echo ""
 	@echo "Variables: VERSION=$(VERSION) BUILD_TYPE=$(BUILD_TYPE) PREFIX=$(PREFIX) JOBS=$(JOBS)"
 
@@ -57,17 +62,26 @@ version:
 # Dependencies
 # ----------------------------------------------------------------------------
 # Build prerequisites: C++17 compiler, CMake, gperf, OpenSSL + zlib dev headers.
+# Installs both the build prerequisites and the developer tooling used for
+# analysis, formatting and faster iteration:
+#   build:   C++17 compiler, cmake, gperf, OpenSSL + zlib dev headers, make
+#   analyze: clang-tools (clangd/clang-tidy/clang-format), cppcheck, valgrind
+#   speed:   ninja, ccache
 # TDLib itself is provided separately (system package, or vendored/from-source);
 # see README. nfpm (for `release`) is fetched on demand by that target.
 deps:
 	@if command -v dnf >/dev/null 2>&1; then \
-		echo ">> Installing build deps via dnf"; \
-		sudo dnf install -y gcc-c++ cmake gperf openssl-devel zlib-devel make; \
+		echo ">> Installing build + dev deps via dnf"; \
+		sudo dnf install -y gcc-c++ cmake gperf openssl-devel zlib-devel make \
+			clang-tools-extra cppcheck valgrind ninja-build ccache; \
 	elif command -v apt-get >/dev/null 2>&1; then \
-		echo ">> Installing build deps via apt-get"; \
-		sudo apt-get update && sudo apt-get install -y g++ cmake gperf libssl-dev zlib1g-dev make; \
+		echo ">> Installing build + dev deps via apt-get"; \
+		sudo apt-get update && sudo apt-get install -y g++ cmake gperf libssl-dev zlib1g-dev make \
+			clangd clang-tidy clang-format cppcheck valgrind ninja-build ccache; \
 	else \
-		echo "!! Unknown package manager. Install manually: a C++17 compiler, cmake, gperf, OpenSSL and zlib dev headers." >&2; \
+		echo "!! Unknown package manager. Install manually:" >&2; \
+		echo "   build:   a C++17 compiler, cmake, gperf, OpenSSL and zlib dev headers, make" >&2; \
+		echo "   dev:     clangd, clang-tidy, clang-format, cppcheck, valgrind, ninja, ccache" >&2; \
 		exit 1; \
 	fi
 
@@ -79,7 +93,9 @@ configure:
 		-DCMAKE_BUILD_TYPE=$(BUILD_TYPE) \
 		-DCMAKE_INSTALL_PREFIX=$(PREFIX) \
 		-DTGCURL_VERSION=$(VERSION) \
+		-DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
 		$(CMAKE_FLAGS)
+	@ln -sf $(BUILD_DIR)/compile_commands.json compile_commands.json 2>/dev/null || true
 
 build: configure
 	cmake --build $(BUILD_DIR) --parallel $(JOBS)
@@ -99,6 +115,26 @@ static:
 # ----------------------------------------------------------------------------
 test: build
 	ctest --test-dir $(BUILD_DIR) --output-on-failure
+
+# ----------------------------------------------------------------------------
+# Static analysis & formatting
+# ----------------------------------------------------------------------------
+# Sources to lint/format. Kept as a variable so it is easy to extend.
+SRC := $(shell find src -type f \( -name '*.cpp' -o -name '*.h' \) 2>/dev/null)
+
+format:
+	@[ -n "$(SRC)" ] && clang-format -i $(SRC) && echo ">> formatted" || echo "no sources yet"
+
+format-check:
+	@[ -n "$(SRC)" ] && clang-format --dry-run --Werror $(SRC) || echo "no sources yet"
+
+# clang-tidy needs compile_commands.json (produced by `configure`).
+tidy: configure
+	@[ -n "$(SRC)" ] && clang-tidy -p $(BUILD_DIR) $(SRC) || echo "no sources yet"
+
+lint:
+	@[ -n "$(SRC)" ] && cppcheck --enable=warning,performance,portability \
+		--std=c++17 --quiet --error-exitcode=1 $(SRC) || echo "no sources yet"
 
 # ----------------------------------------------------------------------------
 # Install

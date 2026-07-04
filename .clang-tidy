@@ -1,0 +1,17 @@
+# clang-tidy checks for tgcurl. A pragmatic set for a modern C++17 CLI:
+# bug-prone patterns, core guidelines, portability, and readability — with a
+# few noisy checks disabled.
+Checks: >
+  bugprone-*,
+  cppcoreguidelines-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  modernize-*,
+  -modernize-use-trailing-return-type,
+  -readability-identifier-length,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -readability-magic-numbers
+WarningsAsErrors: ''
+HeaderFilterRegex: '^src/'
+FormatStyle: file
