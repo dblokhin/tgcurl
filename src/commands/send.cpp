@@ -53,12 +53,14 @@ std::optional<Error> send(const Args& args) {
     }
     const std::int64_t chat_id = std::get<std::int64_t>(resolved);
 
-    // Build inputMessageText { formattedText{text, no entities}, no preview,
-    // don't clear draft }. The entities array is left default-empty.
+    // Build inputMessageText { formattedText{text, no entities}, default link
+    // preview, don't clear draft }. The entities array is left default-empty.
+    // As of TDLib 1.8.63 the disable_web_page_preview bool became a
+    // link_preview_options object; nullptr keeps TDLib's default (previews on).
     auto formatted = td_api::make_object<td_api::formattedText>();
     formatted->text_ = text;
     auto content = td_api::make_object<td_api::inputMessageText>(
-        std::move(formatted), /*disable_web_page_preview=*/false, /*clear_draft=*/false);
+        std::move(formatted), /*link_preview_options=*/nullptr, /*clear_draft=*/false);
 
     auto request = td_api::make_object<td_api::sendMessage>();
     request->chat_id_ = chat_id;

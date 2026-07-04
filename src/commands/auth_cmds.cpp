@@ -111,7 +111,7 @@ std::string user_json(const td_api::user& user) {
     w.field("user_id", static_cast<std::int64_t>(user.id_));
     w.field("first_name", user.first_name_);
     w.field("last_name", user.last_name_);
-    w.field("username", user.username_);
+    w.field("username", primary_username(user.usernames_));
     w.field("phone", user.phone_number_);
     return w.object();
 }

@@ -29,6 +29,27 @@ int main() {
         CHECK_EQ(error_text(none), "");
     }
 
+    // primary_username: null usernames object → empty.
+    {
+        td_api::object_ptr<td_api::usernames> none;
+        CHECK_EQ(primary_username(none), "");
+    }
+    // A populated active list → its first entry (the primary public handle),
+    // even when editable_username_ differs (the case that regresses for
+    // third-party users/chats the account can't edit).
+    {
+        auto u = td_api::make_object<td_api::usernames>();
+        u->active_usernames_ = {"alice", "alice_alt"};
+        u->editable_username_ = "";
+        CHECK_EQ(primary_username(u), "alice");
+    }
+    // Empty active list but an editable handle set → fall back to editable.
+    {
+        auto u = td_api::make_object<td_api::usernames>();
+        u->editable_username_ = "myself";
+        CHECK_EQ(primary_username(u), "myself");
+    }
+
     // A client can be constructed and destroyed without touching the network.
     { TdClient client; }
 

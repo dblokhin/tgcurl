@@ -36,7 +36,11 @@ contents:
 overrides:
   rpm:
     depends:
-      - tdlib          # provides libtdclient.so / libtdapi.so
+      # >= 1.8.63: Telegram rejects login on 1.8.0's MTProto layer (406
+      # UPDATE_APP_TO_LOGIN). Provided by copr stevenlin/tdlib-master, not the
+      # Fedora base repo. Same package name, so the floor is what keeps an
+      # install off the broken base-repo build.
+      - tdlib >= 1.8.63 # provides libtdclient.so / libtdapi.so
       - openssl-libs   # libssl.so.3 / libcrypto.so.3
       - zlib-ng-compat # libz.so.1 (Fedora 40+; older Fedora: zlib)
       - libstdc++      # libstdc++.so.6

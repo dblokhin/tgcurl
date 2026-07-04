@@ -210,15 +210,22 @@ TGCURL_CONFIG_DIR=$(mktemp -d) tgcurl contacts list </dev/null; echo $?
 
 **TDLib** must also be available; the project's CMake finds it via `find_package(Td)`.
 
-- **Fedora (recommended, and what this project builds against):** TDLib is packaged —
-  `sudo dnf install tdlib-devel tdlib-static` (currently 1.8.0). No source build needed;
-  `make static` links `Td::TdStatic` from `tdlib-static`.
-- **Other distros / newer TDLib:** build [tdlib/td](https://github.com/tdlib/td) from source and
-  `make install` it once. Compiling TDLib from source is heavy (a long C++ build).
+> **TDLib ≥ 1.8.63 is required.** The Fedora base-repo package is **1.8.0**, and Telegram
+> **refuses to log in** on its old MTProto layer (`406: UPDATE_APP_TO_LOGIN`). You need a recent
+> build.
 
-> Built and tested against **TDLib 1.8.0** (Fedora package). The `td_api` calls used here
-> (auth, `getContacts`, `getChats`, `searchPublicChat`, `getChatHistory`, `sendMessage`) are
-> stable across recent versions.
+- **Fedora (recommended, and what this project builds against):** install the master snapshot
+  from the copr `stevenlin/tdlib-master` (unofficial):
+  `sudo dnf copr enable stevenlin/tdlib-master && sudo dnf install tdlib-devel tdlib-static`
+  (currently `1.8.63`). No source build needed; `make static` links `Td::TdStatic` from
+  `tdlib-static`. Do **not** use the base-repo `tdlib` 1.8.0 — it cannot log in.
+- **Other distros / newer TDLib:** build [tdlib/td](https://github.com/tdlib/td) from source
+  (a recent `master`) and `make install` it once. Compiling TDLib from source is heavy (a long
+  C++ build).
+
+> Built and tested against **TDLib 1.8.63** (copr `stevenlin/tdlib-master`, MTProto layer 227).
+> Between 1.8.0 and 1.8.63 several `td_api` types changed (flat `setTdlibParameters`, `usernames`
+> object, `setMessageSenderBlockList`, `linkPreviewOptions`), so older TDLib will not build.
 
 ### Make targets
 

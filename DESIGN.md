@@ -175,6 +175,13 @@ README.md                   // build steps, my.telegram.org registration, agent-
 ## Build
 
 - **CMake ≥ 3.10, C++17.** Links `Td::TdStatic`.
+- **TDLib ≥ 1.8.63 required.** Telegram rejects login on TDLib 1.8.0's old MTProto layer with
+  `406 UPDATE_APP_TO_LOGIN`; a recent build is mandatory, not optional. On Fedora this means the
+  copr `stevenlin/tdlib-master` (a master snapshot), not the base-repo 1.8.0. `td_api` changed
+  between the two: `setTdlibParameters` is now flat and carries `database_encryption_key` (so the
+  former `WaitEncryptionKey` auth step is gone), `user`/`supergroup` expose a `usernames` object
+  instead of a single `username`, `importContacts` takes `importedContact`, `inputMessageText`
+  takes `linkPreviewOptions`, and blocking uses `setMessageSenderBlockList(blockListMain)`.
 - **TDLib build prerequisites:** C++17 compiler (GCC ≥ 7 / Clang ≥ 5), OpenSSL, zlib, gperf,
   CMake.
 - **TDLib provisioning:** deferred. Either a system-installed TDLib (`find_package(Td)`) or a

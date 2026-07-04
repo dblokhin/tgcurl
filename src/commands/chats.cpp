@@ -89,7 +89,7 @@ std::string chat_username(TdClient& client, const td_api::ChatType& type) {
             return "";
         }
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
-        return static_cast<const td_api::user&>(*obj).username_;
+        return primary_username(static_cast<const td_api::user&>(*obj).usernames_);
     }
     case td_api::chatTypeSupergroup::ID: {
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
@@ -99,7 +99,7 @@ std::string chat_username(TdClient& client, const td_api::ChatType& type) {
             return "";
         }
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
-        return static_cast<const td_api::supergroup&>(*obj).username_;
+        return primary_username(static_cast<const td_api::supergroup&>(*obj).usernames_);
     }
     default:
         return "";

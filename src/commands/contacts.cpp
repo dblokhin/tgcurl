@@ -3,7 +3,7 @@
 // list  — getContacts → per user getUser + createPrivateChat → JSON array of
 //         {user_id, chat_id, username, phone, first_name, last_name}.
 // new   — importContacts(phone, first, [last]) → {ok, user_id, chat_id}.
-// block — resolve id → toggleMessageSenderIsBlocked(true) → {ok:true}.
+// block — resolve id → setMessageSenderBlockList(blockListMain) → {ok:true}.
 #include "error.h"
 #include "json_out.h"
 #include "resolve.h"
@@ -34,7 +34,7 @@ std::string contact_json(const td_api::user& user, std::int64_t chat_id) {
     json::Writer w;
     w.field("user_id", static_cast<std::int64_t>(user.id_));
     w.field("chat_id", chat_id);
-    w.field("username", user.username_);
+    w.field("username", primary_username(user.usernames_));
     w.field("phone", user.phone_number_);
     w.field("first_name", user.first_name_);
     w.field("last_name", user.last_name_);
@@ -89,12 +89,14 @@ std::optional<Error> do_new(TdClient& client, const Args& args) {
     const std::string& first = args[2];
     const std::string last = args.size() == 4 ? args[3] : std::string();
 
-    auto contact = td_api::make_object<td_api::contact>();
+    // As of TDLib 1.8.63 importContacts takes `importedContact` (was `contact`);
+    // the phone/name fields are unchanged, plus an optional formatted-text note.
+    auto contact = td_api::make_object<td_api::importedContact>();
     contact->phone_number_ = phone;
     contact->first_name_ = first;
     contact->last_name_ = last;
 
-    std::vector<td_api::object_ptr<td_api::contact>> list;
+    std::vector<td_api::object_ptr<td_api::importedContact>> list;
     list.push_back(std::move(contact));
 
     Object result = client.send_query(td_api::make_object<td_api::importContacts>(std::move(list)));
@@ -155,10 +157,13 @@ std::optional<Error> do_block(TdClient& client, const Args& args) {
     const std::int64_t chat_id = std::get<std::int64_t>(resolved);
 
     auto sender = sender_for_chat(client, chat_id);
-    Object result = client.send_query(td_api::make_object<td_api::toggleMessageSenderIsBlocked>(
-        std::move(sender), /*is_blocked=*/true));
+    // As of TDLib 1.8.63 toggleMessageSenderIsBlocked was replaced by
+    // setMessageSenderBlockList; blockListMain is the ordinary block list
+    // (blockListStories is the separate "block from stories" list).
+    Object result = client.send_query(td_api::make_object<td_api::setMessageSenderBlockList>(
+        std::move(sender), td_api::make_object<td_api::blockListMain>()));
     if (is_error(result)) {
-        return Error("request_failed", "toggleMessageSenderIsBlocked: " + error_text(result));
+        return Error("request_failed", "setMessageSenderBlockList: " + error_text(result));
     }
 
     json::Writer w;

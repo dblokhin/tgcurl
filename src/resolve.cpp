@@ -53,8 +53,21 @@ Classified classify(const std::string& arg) {
 std::variant<std::int64_t, Error> resolve_id(TdClient& client, const std::string& arg) {
     Classified c = classify(arg);
     switch (c.kind) {
-    case IdKind::ChatId:
-        return c.chat_id;
+    case IdKind::ChatId: {
+        // A chat_id from `chats list` / `contacts list` may name a chat this
+        // one-shot process has never opened, so TDLib doesn't know it yet and a
+        // later sendMessage fails with "Chat not found". getChat makes the chat
+        // known (loading it from the server when needed) and confirms it exists;
+        // it works for every chat type (private, group, supergroup, channel).
+        Object obj = client.send_query(td_api::make_object<td_api::getChat>(c.chat_id));
+        if (is_error(obj)) {
+            return Error("unresolvable",
+                         "no chat " + std::to_string(c.chat_id) + ": " + error_text(obj));
+        }
+        // Safe downcast: getChat returns `chat` on success.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+        return static_cast<const td_api::chat&>(*obj).id_;
+    }
 
     case IdKind::Username: {
         Object obj = client.send_query(td_api::make_object<td_api::searchPublicChat>(c.username));

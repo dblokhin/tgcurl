@@ -71,6 +71,14 @@ class TdClient {
 // If obj is a td_api::error, returns "<code>: <message>"; otherwise "".
 [[nodiscard]] std::string error_text(const Object& obj);
 
+// The primary public handle from a user's/supergroup's `usernames` object, or
+// "" if there is none. As of TDLib 1.8.63 the single `username_` field was
+// replaced by a nullable `usernames_` object; the primary handle to display is
+// active_usernames_[0] (editable_username_ is only the *own* editable handle,
+// empty for third-party users/chats), falling back to editable_username_.
+[[nodiscard]] std::string
+primary_username(const td::td_api::object_ptr<td::td_api::usernames>& usernames);
+
 } // namespace tgcurl
 
 #endif // TGCURL_TDCLIENT_H

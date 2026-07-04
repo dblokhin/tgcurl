@@ -13,7 +13,9 @@ connect, do one thing, print JSON, exit.
 
 ```
 make deps         # install build + dev tooling (dnf/apt; needs sudo). TDLib separately:
-                  #   Fedora: sudo dnf install tdlib-devel tdlib-static
+                  #   Fedora: sudo dnf copr enable stevenlin/tdlib-master \
+                  #        && sudo dnf install tdlib-devel tdlib-static   # >= 1.8.63
+                  #   (base-repo 1.8.0 can't log in: 406 UPDATE_APP_TO_LOGIN)
 make build        # configure + compile -> build/tgcurl  (BUILD_TYPE=Debug for debug)
 make test         # ctest
 make format       # clang-format -i    (format-check = dry-run)
@@ -49,9 +51,7 @@ DESIGN.md → *Build*. `make build` exports `compile_commands.json` for clangd/c
 2. Write tests covering it (pure logic → a `ctest` unit test; network paths → note the manual
    check). `make build` and `make test` pass — never break the build or existing tests.
 3. `make format` clean; no new `make lint` / `make tidy` warnings in changed code.
-4. Hand the change to the **`code-reviewer`** subagent. Fix its findings, then re-run 2–4.
-   Repeat until it approves.
-5. Only then commit.
+4. Only then commit.
 
 ## Workflow
 

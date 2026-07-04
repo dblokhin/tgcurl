@@ -14,13 +14,19 @@ namespace {
 constexpr const char* kDeviceModel = "tgcurl";
 constexpr const char* kSystemVersion = "cli";
 
-// Build the tdlibParameters for a one-shot CLI: no message/chat cache, no
-// secret chats, session persisted under config's database_directory.
+// Build the setTdlibParameters request for a one-shot CLI: no message/chat
+// cache, no secret chats, session persisted under config's database_directory.
+//
+// As of TDLib 1.8.63 setTdlibParameters is flat (the nested `tdlibParameters`
+// object was removed) and carries `database_encryption_key` directly, so the
+// former WaitEncryptionKey/checkDatabaseEncryptionKey step no longer exists.
+// We pass an empty key: the local session DB is unencrypted at rest.
 td_api::object_ptr<td_api::setTdlibParameters> make_parameters(const Config& config) {
-    auto params = td_api::make_object<td_api::tdlibParameters>();
+    auto params = td_api::make_object<td_api::setTdlibParameters>();
     params->use_test_dc_ = false;
     params->database_directory_ = database_dir();
     params->files_directory_ = database_dir() + "/files";
+    params->database_encryption_key_ = std::string();
     params->use_file_database_ = false;
     params->use_chat_info_database_ = false;
     params->use_message_database_ = false;
@@ -31,9 +37,7 @@ td_api::object_ptr<td_api::setTdlibParameters> make_parameters(const Config& con
     params->device_model_ = kDeviceModel;
     params->system_version_ = kSystemVersion;
     params->application_version_ = "0.1.0";
-    params->enable_storage_optimizer_ = true;
-    params->ignore_file_names_ = true;
-    return td_api::make_object<td_api::setTdlibParameters>(std::move(params));
+    return params;
 }
 
 // Turn a TDLib response that should be `ok` into an optional Error.
@@ -92,13 +96,6 @@ class Flow {
         switch (state->get_id()) {
         case td_api::authorizationStateWaitTdlibParameters::ID:
             return send_step(client_->send_query(make_parameters(*config_)), "setTdlibParameters");
-
-        case td_api::authorizationStateWaitEncryptionKey::ID:
-            // Older TDLib expects the (empty) local encryption key next.
-            return send_step(
-                client_->send_query(td_api::make_object<td_api::checkDatabaseEncryptionKey>(
-                    /*encryption_key=*/std::string())),
-                "checkDatabaseEncryptionKey");
 
         case td_api::authorizationStateWaitPhoneNumber::ID:
             return step_phone();

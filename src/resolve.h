@@ -1,12 +1,13 @@
 // Resolve a command-line identifier to a TDLib chat_id.
 //
 // tgcurl's addressing rule (see DESIGN.md → Peer identification):
-//   - a purely numeric arg IS a chat_id, used directly (fast path);
+//   - a purely numeric arg IS a chat_id, opened via getChat so a cold one-shot
+//     process actually knows the chat before using it;
 //   - an arg starting with '@' is a public username, resolved via
 //     searchPublicChat (works for public users/channels/supergroups);
 //   - anything else is unresolvable — no fuzzy name matching.
 // classify() is the pure part (unit-testable, no network); resolve() adds the
-// searchPublicChat round-trip for the username case.
+// getChat / searchPublicChat round-trip for the id / username cases.
 #ifndef TGCURL_RESOLVE_H
 #define TGCURL_RESOLVE_H
 
@@ -34,10 +35,12 @@ struct Classified {
 // Classify an identifier per the addressing rule above.
 [[nodiscard]] Classified classify(const std::string& arg);
 
-// Resolve an identifier to a chat_id, performing searchPublicChat for the
-// username case. Returns the chat_id or an Error:
-//   - "unresolvable" for a non-numeric, non-'@' arg,
-//   - the underlying TDLib error if searchPublicChat fails.
+// Resolve an identifier to a chat_id, opening the chat as a side effect
+// (getChat for a numeric id, searchPublicChat for a username) so it is known to
+// this client before use. Returns the chat_id or an Error:
+//   - "unresolvable" for a non-numeric, non-'@' arg, an unknown chat_id, or an
+//     unknown public username,
+//   - carrying the underlying TDLib error text.
 std::variant<std::int64_t, Error> resolve_id(TdClient& client, const std::string& arg);
 
 } // namespace tgcurl

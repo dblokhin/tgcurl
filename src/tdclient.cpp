@@ -115,4 +115,16 @@ std::string error_text(const Object& obj) {
     return std::to_string(err.code_) + ": " + err.message_;
 }
 
+std::string primary_username(const td_api::object_ptr<td_api::usernames>& usernames) {
+    if (usernames == nullptr) {
+        return {};
+    }
+    // active_usernames_[0] is the handle to show as primary; editable_username_
+    // is only what the logged-in account may edit (empty for others).
+    if (!usernames->active_usernames_.empty()) {
+        return usernames->active_usernames_.front();
+    }
+    return usernames->editable_username_;
+}
+
 } // namespace tgcurl

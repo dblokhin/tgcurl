@@ -14,7 +14,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(TGCURL_STATIC "Statically link TDLib and the C++ runtime for a portable binary" OFF)
 
 # TDLib (Telegram's official library), found via its installed CMake package.
-find_package(Td 1.8.0 REQUIRED)
+# 1.8.63 (copr stevenlin/tdlib-master): 1.8.0's MTProto layer is too old for
+# Telegram to allow login (406 UPDATE_APP_TO_LOGIN). See DESIGN.md → Build.
+find_package(Td 1.8.63 REQUIRED)
 
 # ---- Pure-logic core (NO TDLib) --------------------------------------------
 # Holds dependency-free logic (json, error, version, later config/resolve
