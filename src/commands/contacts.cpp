@@ -1,11 +1,12 @@
-// contacts list — dump the address book as JSON.
+// contacts list / new / block.
 //
-// getContacts returns user_ids; for each we fetch the user (name/username/
-// phone) and its private chat_id (the stable identifier every other command
-// consumes). Output is a JSON array of
-//   {user_id, chat_id, username, phone, first_name, last_name}.
+// list  — getContacts → per user getUser + createPrivateChat → JSON array of
+//         {user_id, chat_id, username, phone, first_name, last_name}.
+// new   — importContacts(phone, first, [last]) → {ok, user_id, chat_id}.
+// block — resolve id → toggleMessageSenderIsBlocked(true) → {ok:true}.
 #include "error.h"
 #include "json_out.h"
+#include "resolve.h"
 #include "session.h"
 #include "tdclient.h"
 
@@ -15,6 +16,7 @@
 #include <optional>
 #include <string>
 #include <td/telegram/td_api.h>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -39,22 +41,8 @@ std::string contact_json(const td_api::user& user, std::int64_t chat_id) {
     return w.object();
 }
 
-} // namespace
-
-namespace commands {
-
-std::optional<Error> contacts(const Args& args) {
-    // Only the "list" subcommand exists here for now (new/block land in #8).
-    if (args.empty() || args[0] != "list") {
-        return Error("usage", "contacts list");
-    }
-
-    std::variant<std::unique_ptr<TdClient>, Error> session = open_session();
-    if (std::holds_alternative<Error>(session)) {
-        return std::get<Error>(session);
-    }
-    TdClient& client = *std::get<std::unique_ptr<TdClient>>(session);
-
+// contacts list: dump the whole address book.
+std::optional<Error> do_list(TdClient& client) {
     Object contacts_obj = client.send_query(td_api::make_object<td_api::getContacts>());
     if (is_error(contacts_obj)) {
         return Error("request_failed", "getContacts: " + error_text(contacts_obj));
@@ -89,6 +77,139 @@ std::optional<Error> contacts(const Args& args) {
 
     json::emit(arr.array(), std::cout);
     return std::nullopt;
+}
+
+// contacts new <phone> <first> [last]: import a single contact.
+std::optional<Error> do_new(TdClient& client, const Args& args) {
+    // args: ["new", <phone>, <first>, [last]]
+    if (args.size() < 3 || args.size() > 4) {
+        return Error("usage", "contacts new <phone> <first_name> [last_name]");
+    }
+    const std::string& phone = args[1];
+    const std::string& first = args[2];
+    const std::string last = args.size() == 4 ? args[3] : std::string();
+
+    auto contact = td_api::make_object<td_api::contact>();
+    contact->phone_number_ = phone;
+    contact->first_name_ = first;
+    contact->last_name_ = last;
+
+    std::vector<td_api::object_ptr<td_api::contact>> list;
+    list.push_back(std::move(contact));
+
+    Object result = client.send_query(td_api::make_object<td_api::importContacts>(std::move(list)));
+    if (is_error(result)) {
+        return Error("request_failed", "importContacts: " + error_text(result));
+    }
+    // Safe downcast: importContacts returns `importedContacts` on success.
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+    const auto& imported = static_cast<const td_api::importedContacts&>(*result);
+
+    // user_id is 0 when the phone isn't on Telegram; still report ok so the
+    // caller can distinguish "added but not registered" from a request error.
+    std::int64_t user_id = imported.user_ids_.empty() ? 0 : imported.user_ids_.front();
+    std::int64_t chat_id = 0;
+    if (user_id != 0) {
+        Object chat_obj = client.send_query(
+            td_api::make_object<td_api::createPrivateChat>(user_id, /*force=*/false));
+        if (!is_error(chat_obj)) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+            chat_id = static_cast<const td_api::chat&>(*chat_obj).id_;
+        }
+    }
+
+    json::Writer w;
+    w.field("ok", true);
+    w.field("user_id", user_id);
+    w.field("chat_id", chat_id);
+    json::emit(w.object(), std::cout);
+    return std::nullopt;
+}
+
+// Build the MessageSender for a resolved chat_id: a private chat blocks its
+// user; any other chat blocks the chat sender itself.
+td_api::object_ptr<td_api::MessageSender> sender_for_chat(TdClient& client, std::int64_t chat_id) {
+    Object chat_obj = client.send_query(td_api::make_object<td_api::getChat>(chat_id));
+    if (!is_error(chat_obj)) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+        const auto& chat = static_cast<const td_api::chat&>(*chat_obj);
+        if (chat.type_ != nullptr && chat.type_->get_id() == td_api::chatTypePrivate::ID) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+            const auto& priv = static_cast<const td_api::chatTypePrivate&>(*chat.type_);
+            return td_api::make_object<td_api::messageSenderUser>(priv.user_id_);
+        }
+    }
+    return td_api::make_object<td_api::messageSenderChat>(chat_id);
+}
+
+// contacts block <id>: block a chat_id or @username.
+std::optional<Error> do_block(TdClient& client, const Args& args) {
+    // args: ["block", <id>]
+    if (args.size() != 2) {
+        return Error("usage", "contacts block <chat_id|@username>");
+    }
+    std::variant<std::int64_t, Error> resolved = resolve_id(client, args[1]);
+    if (std::holds_alternative<Error>(resolved)) {
+        return std::get<Error>(resolved);
+    }
+    const std::int64_t chat_id = std::get<std::int64_t>(resolved);
+
+    auto sender = sender_for_chat(client, chat_id);
+    Object result = client.send_query(td_api::make_object<td_api::toggleMessageSenderIsBlocked>(
+        std::move(sender), /*is_blocked=*/true));
+    if (is_error(result)) {
+        return Error("request_failed", "toggleMessageSenderIsBlocked: " + error_text(result));
+    }
+
+    json::Writer w;
+    w.field("ok", true);
+    json::emit(w.object(), std::cout);
+    return std::nullopt;
+}
+
+} // namespace
+
+namespace commands {
+
+std::optional<Error> contacts(const Args& args) {
+    if (args.empty()) {
+        return Error("usage", "contacts <list|new|block> ...");
+    }
+    const std::string& sub = args[0];
+
+    // block classifies its identifier before opening a session, so a free-text
+    // name fails as unresolvable without needing auth.
+    if (sub == "block" && args.size() == 2 && classify(args[1]).kind == IdKind::Unresolvable) {
+        return Error("unresolvable",
+                     "use chat_id from 'contacts list' / 'chats list', or a public @username");
+    }
+
+    if (sub != "list" && sub != "new" && sub != "block") {
+        return Error("usage", "contacts <list|new|block> ...");
+    }
+
+    // Validate argument shapes before opening a session, so obvious usage
+    // mistakes fail fast without needing auth.
+    if (sub == "new" && (args.size() < 3 || args.size() > 4)) {
+        return Error("usage", "contacts new <phone> <first_name> [last_name]");
+    }
+    if (sub == "block" && args.size() != 2) {
+        return Error("usage", "contacts block <chat_id|@username>");
+    }
+
+    std::variant<std::unique_ptr<TdClient>, Error> session = open_session();
+    if (std::holds_alternative<Error>(session)) {
+        return std::get<Error>(session);
+    }
+    TdClient& client = *std::get<std::unique_ptr<TdClient>>(session);
+
+    if (sub == "list") {
+        return do_list(client);
+    }
+    if (sub == "new") {
+        return do_new(client, args);
+    }
+    return do_block(client, args);
 }
 
 } // namespace commands

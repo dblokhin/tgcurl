@@ -15,10 +15,12 @@
 #   send_unresolvable- `send "John Smith" "x"` -> unresolvable error before any
 #                      network (a free-text name can't be addressed).
 #   chat_unresolvable- `chat "John Smith"` -> unresolvable error.
+#   contacts_new_bad - `contacts new` (missing args) -> usage error pre-network.
+#   contacts_block_unresolvable - `contacts block "John Smith"` -> unresolvable.
 
 # Auth modes run against a throwaway, empty config directory so they never
 # touch a real session and start from a known "no config" state.
-if(MODE MATCHES "^(login_headless|logout_noconfig|chats_bad_limit|contacts_bad_sub|send_unresolvable|chat_unresolvable)$")
+if(MODE MATCHES "^(login_headless|logout_noconfig|chats_bad_limit|contacts_bad_sub|send_unresolvable|chat_unresolvable|contacts_new_bad|contacts_block_unresolvable)$")
   set(SCRATCH "${CMAKE_CURRENT_BINARY_DIR}/cli_scratch_${MODE}")
   file(REMOVE_RECURSE "${SCRATCH}")
   set(ENV{TGCURL_CONFIG_DIR} "${SCRATCH}")
@@ -38,6 +40,10 @@ elseif(MODE STREQUAL "send_unresolvable")
   set(ARGS "send;John Smith;hello")
 elseif(MODE STREQUAL "chat_unresolvable")
   set(ARGS "chat;John Smith")
+elseif(MODE STREQUAL "contacts_new_bad")
+  set(ARGS "contacts;new")
+elseif(MODE STREQUAL "contacts_block_unresolvable")
+  set(ARGS "contacts;block;John Smith")
 else() # usage: no args
   set(ARGS "")
 endif()
