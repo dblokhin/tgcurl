@@ -123,18 +123,19 @@ test: build
 SRC := $(shell find src -type f \( -name '*.cpp' -o -name '*.h' \) 2>/dev/null)
 
 format:
-	@[ -n "$(SRC)" ] && clang-format -i $(SRC) && echo ">> formatted" || echo "no sources yet"
+	@if [ -n "$(SRC)" ]; then clang-format -i $(SRC) && echo ">> formatted"; else echo "no sources yet"; fi
 
 format-check:
-	@[ -n "$(SRC)" ] && clang-format --dry-run --Werror $(SRC) || echo "no sources yet"
+	@if [ -n "$(SRC)" ]; then clang-format --dry-run --Werror $(SRC); else echo "no sources yet"; fi
 
 # clang-tidy needs compile_commands.json (produced by `configure`).
 tidy: configure
-	@[ -n "$(SRC)" ] && clang-tidy -p $(BUILD_DIR) $(SRC) || echo "no sources yet"
+	@if [ -n "$(SRC)" ]; then clang-tidy -p $(BUILD_DIR) $(SRC); else echo "no sources yet"; fi
 
 lint:
-	@[ -n "$(SRC)" ] && cppcheck --enable=warning,performance,portability \
-		--std=c++17 --quiet --error-exitcode=1 $(SRC) || echo "no sources yet"
+	@if [ -n "$(SRC)" ]; then cppcheck --enable=warning,performance,portability \
+		--language=c++ --std=c++17 --quiet --error-exitcode=1 \
+		--suppress=missingIncludeSystem -I src $(SRC); else echo "no sources yet"; fi
 
 # ----------------------------------------------------------------------------
 # Install

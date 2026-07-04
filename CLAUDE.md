@@ -12,7 +12,8 @@ connect, do one thing, print JSON, exit.
 ## Commands
 
 ```
-make deps         # install build + dev tooling (dnf/apt; needs sudo)
+make deps         # install build + dev tooling (dnf/apt; needs sudo). TDLib separately:
+                  #   Fedora: sudo dnf install tdlib-devel tdlib-static
 make build        # configure + compile -> build/tgcurl  (BUILD_TYPE=Debug for debug)
 make test         # ctest
 make format       # clang-format -i    (format-check = dry-run)
@@ -42,16 +43,20 @@ DESIGN.md → *Build*. `make build` exports `compile_commands.json` for clangd/c
 - C++17; formatting and checks are pinned in `.clang-format` / `.clang-tidy` — don't restate
   style rules here.
 
-## Definition of done (every change)
+## Definition of done (every change) — in order
 
-- Covered by a test (pure logic → a `ctest` unit test; network paths → note the manual check).
-- `make build` and `make test` pass — do not break the build or existing tests.
-- `make format` clean; no new `make lint` / `make tidy` warnings in changed code.
+1. Implement the change.
+2. Write tests covering it (pure logic → a `ctest` unit test; network paths → note the manual
+   check). `make build` and `make test` pass — never break the build or existing tests.
+3. `make format` clean; no new `make lint` / `make tidy` warnings in changed code.
+4. Hand the change to the **`code-reviewer`** subagent. Fix its findings, then re-run 2–4.
+   Repeat until it approves.
+5. Only then commit.
 
 ## Workflow
 
-- Work tracks GitHub issues **#1–#9** (`dblokhin/tgcurl`); they carry the dependency order.
-  Reference the issue in commits/PRs.
-- Branch off `main`; commit/push only when asked. End commit messages with the
-  `Co-Authored-By` trailer.
+- Do tasks **strictly sequentially** in issue dependency order (#1 → #9); one at a time.
+- Work tracks GitHub issues **#1–#9** (`dblokhin/tgcurl`).
+- Branch off `main`; commit/push only when asked. Commit message must include **`closes #<id>`**
+  when an issue covers the change, and end with the `Co-Authored-By` trailer.
 - Tools available: GitHub MCP (issues/PRs), Context7 MCP (library docs incl. TDLib `td_api`).
