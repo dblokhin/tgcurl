@@ -54,15 +54,19 @@ std::variant<std::int64_t, Error> resolve_id(TdClient& client, const std::string
     Classified c = classify(arg);
     switch (c.kind) {
     case IdKind::ChatId: {
-        // A chat_id from `chats list` / `contacts list` may name a chat this
-        // one-shot process has never opened, so TDLib doesn't know it yet and a
-        // later sendMessage fails with "Chat not found". getChat makes the chat
-        // known (loading it from the server when needed) and confirms it exists;
-        // it works for every chat type (private, group, supergroup, channel).
+        // getChat is a local lookup (it does NOT fetch from the server). It
+        // succeeds only if the chat is "warm" — its peer data is in the cache,
+        // either fetched earlier this process or persisted from a prior run via
+        // use_message_database (see DESIGN.md → Peer identification → Warming).
+        // Doing it here validates the id and turns a cold chat into a clear
+        // resolve-time error instead of a downstream sendMessage "Chat not
+        // found". Works for every chat type (private/group/supergroup/channel).
         Object obj = client.send_query(td_api::make_object<td_api::getChat>(c.chat_id));
         if (is_error(obj)) {
-            return Error("unresolvable",
-                         "no chat " + std::to_string(c.chat_id) + ": " + error_text(obj));
+            return Error("unresolvable", "chat " + std::to_string(c.chat_id) +
+                                             " not known — run 'chats list' or 'contacts list' "
+                                             "first, or use @username: " +
+                                             error_text(obj));
         }
         // Safe downcast: getChat returns `chat` on success.
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)

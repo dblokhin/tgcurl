@@ -14,22 +14,37 @@ namespace {
 constexpr const char* kDeviceModel = "tgcurl";
 constexpr const char* kSystemVersion = "cli";
 
-// Build the setTdlibParameters request for a one-shot CLI: no message/chat
-// cache, no secret chats, session persisted under config's database_directory.
+// Build the setTdlibParameters request for a one-shot CLI: peer metadata cached
+// across runs (but not message history), no secret chats, session persisted
+// under config's database_directory.
 //
 // As of TDLib 1.8.63 setTdlibParameters is flat (the nested `tdlibParameters`
 // object was removed) and carries `database_encryption_key` directly, so the
 // former WaitEncryptionKey/checkDatabaseEncryptionKey step no longer exists.
 // We pass an empty key: the local session DB is unencrypted at rest.
+//
+// use_message_database persists TDLib's cache of chats and messages between
+// runs. We enable it for one reason: it is the only setting under which a bare
+// chat_id — obtained from `chats list`/`contacts list` in an earlier one-shot
+// process — is usable directly by a later `send`/`chat` with no extra step
+// (tdlib/td#88, "every previously seen chat ... can be used ... without any
+// additional step"). Without a database, TDLib needs server-fetched peer data
+// (an access hash, not just the numeric id) to address a chat, and that data is
+// gone at process exit, so sendMessage fails "Chat not found". The weaker
+// use_chat_info_database alone is not enough here: it still requires a
+// create*Chat call (which needs the underlying user_id/supergroup_id we don't
+// have from a bare chat_id). use_message_database implies use_chat_info_database
+// and use_file_database. It caches message history on disk under database_dir()
+// (mode 0700), cleared on `logout`.
 td_api::object_ptr<td_api::setTdlibParameters> make_parameters(const Config& config) {
     auto params = td_api::make_object<td_api::setTdlibParameters>();
     params->use_test_dc_ = false;
     params->database_directory_ = database_dir();
     params->files_directory_ = database_dir() + "/files";
     params->database_encryption_key_ = std::string();
-    params->use_file_database_ = false;
-    params->use_chat_info_database_ = false;
-    params->use_message_database_ = false;
+    params->use_file_database_ = true;
+    params->use_chat_info_database_ = true;
+    params->use_message_database_ = true;
     params->use_secret_chats_ = false;
     params->api_id_ = config.api_id;
     params->api_hash_ = config.api_hash;

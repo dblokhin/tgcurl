@@ -25,7 +25,9 @@ one thing, print JSON, exit.
 
 - No fuzzy display-name matching (e.g. "John Smith" → chat). The agent does that using list
   output.
-- No local message cache / database beyond what the session needs.
+- A local TDLib database *is* kept (`use_message_database=true`, which implies chat-info and file
+  databases) — required so a `chat_id` stays usable across one-shot runs (see *Peer identification
+  → warming*). It lives under `database_directory` (mode 0700) and is cleared on `logout`.
 - No hand-rolled MTProto implementation.
 
 ---
@@ -64,8 +66,9 @@ Auth is a **state machine** driven by `updateAuthorizationState`. TDLib emits st
 we react to each:
 
 1. `authorizationStateWaitTdlibParameters` → `setTdlibParameters` with `api_id`, `api_hash`,
-   the **`database_directory`** (where the session lives), `use_message_database=false`
-   (one-shot tool needs no message cache), `use_secret_chats=false`, plus system/app version.
+   the **`database_directory`** (where the session lives), `use_message_database=true` (persist
+   the chat/peer cache so a `chat_id` survives between runs — see *Peer identification*),
+   `use_secret_chats=false`, plus system/app version.
 2. `authorizationStateWaitPhoneNumber` → `setAuthenticationPhoneNumber(phone)`.
 3. `authorizationStateWaitCode` → `checkAuthenticationCode(code)`.
 4. `authorizationStateWaitPassword` (only if 2FA enabled) → `checkAuthenticationPassword(pw)`.
@@ -115,12 +118,34 @@ fits the Unix-way philosophy — list commands emit stable ids, the agent operat
   list once and addresses everything by the deterministic `chat_id` — no fragile per-call
   resolution.
 - **`chat` / `send` / `contacts block` parse their identifier argument as:**
-  - purely numeric → a `chat_id`, used directly (fast path, always works);
+  - purely numeric → a `chat_id`, used directly (works once the chat is *warm* — see below);
   - starts with `@` → `searchPublicChat` (public usernames / channels / supergroups);
   - anything else → `{"error":"unresolvable","hint":"use chat_id from 'contacts list' /
     'chats list', or a public @username"}`.
 - **Phone is not a direct input** to `chat`/`send`. Instead `contacts list` exposes the
   `phone → chat_id` mapping and the agent does the matching itself.
+
+### Warming — why a raw `chat_id` needs the chat to be known first
+
+A numeric `chat_id` is **not enough on its own** to address a chat. Telegram's MTProto requires
+server-issued peer data (an access hash) for every peer; TDLib deliberately refuses to send using
+only a fabricated id — otherwise anyone could message arbitrary users by iterating ids
+([tdlib/td#88](https://github.com/tdlib/td/issues/88#issuecomment-640638710)). That peer data
+comes **only from the server**: via an incoming update, `searchPublicChat`, or a chat-list fetch.
+
+A chat is **"warm"** for a given `chat_id` once TDLib holds its peer data. Two ways to get there:
+
+- **Same process:** the command itself fetched the chat — e.g. `send @username` goes through
+  `searchPublicChat`, which warms the chat before sending.
+- **Across processes:** because `use_message_database=true`, the chat/peer cache fetched by *any*
+  earlier command persists on disk (flushed by the graceful `close` in `TdClient`'s destructor).
+  So `chats list` / `contacts list` warms every chat it returns, and a later `send <chat_id>` in a
+  fresh process finds the chat in the cache and works with no extra step (tdlib/td#88).
+
+Practical consequence: a `chat_id` you just got from `chats list` / `contacts list` is warm and
+usable. A `chat_id` for a chat this session has *never* fetched (all databases were empty) is
+cold — run a `list` first, or address it by `@username`. This is inherent to TDLib's design (it
+assumes a persistent client DB), not a tgcurl limitation.
 
 ---
 

@@ -1,8 +1,9 @@
 // Resolve a command-line identifier to a TDLib chat_id.
 //
 // tgcurl's addressing rule (see DESIGN.md → Peer identification):
-//   - a purely numeric arg IS a chat_id, opened via getChat so a cold one-shot
-//     process actually knows the chat before using it;
+//   - a purely numeric arg IS a chat_id, validated via getChat (a local lookup):
+//     it must be "warm" — known to TDLib's cache from a prior fetch/run — or it
+//     is rejected with guidance to run a list command first;
 //   - an arg starting with '@' is a public username, resolved via
 //     searchPublicChat (works for public users/channels/supergroups);
 //   - anything else is unresolvable — no fuzzy name matching.
