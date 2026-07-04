@@ -89,14 +89,37 @@ class Writer {
         return *this;
     }
 
-    std::string object() const { return "{" + buf_.str() + "}"; }
+    [[nodiscard]] std::string object() const { return "{" + buf_.str() + "}"; }
 
   private:
     std::ostringstream buf_;
     bool first_ = true;
 };
 
-// Print a serialized JSON value to stdout with a trailing newline.
+// Builder for a top-level JSON array. Commands like `contacts list`, `chats
+// list` and `chat` emit arrays of objects; this is the one blessed path for
+// comma-joining pre-serialized elements so callers don't hand-roll it.
+class ArrayWriter {
+  public:
+    // Append an already-serialized JSON value (typically a Writer::object()).
+    ArrayWriter& element(const std::string& raw_value) {
+        if (!first_) {
+            buf_ << ',';
+        }
+        first_ = false;
+        buf_ << raw_value;
+        return *this;
+    }
+
+    [[nodiscard]] std::string array() const { return "[" + buf_.str() + "]"; }
+
+  private:
+    std::ostringstream buf_;
+    bool first_ = true;
+};
+
+// Print a serialized JSON value to the given stream (stdout in production),
+// with a trailing newline.
 inline void emit(const std::string& json_value, std::ostream& os) {
     os << json_value << '\n';
 }

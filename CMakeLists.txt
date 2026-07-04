@@ -16,17 +16,27 @@ option(TGCURL_STATIC "Statically link TDLib and the C++ runtime for a portable b
 # TDLib (Telegram's official library), found via its installed CMake package.
 find_package(Td 1.8.0 REQUIRED)
 
-# ---- Core library (everything except main, so tests can link it) -----------
+# ---- Pure-logic core (NO TDLib) --------------------------------------------
+# Holds dependency-free logic (json, error, version, later config/resolve
+# helpers) so unit tests can link it without dragging in TDLib. Do NOT link
+# Td here — anything touching TDLib belongs in tgcurl_td below.
 add_library(tgcurl_core
   src/tgcurl_version.cpp
 )
 target_include_directories(tgcurl_core PUBLIC src)
 target_compile_definitions(tgcurl_core PUBLIC TGCURL_VERSION="${TGCURL_VERSION}")
-target_link_libraries(tgcurl_core PUBLIC Td::TdStatic)
+
+# ---- TDLib-backed layer ----------------------------------------------------
+# The tdclient wrapper (issue #3), auth, and command bodies land here; this is
+# the only target that links TDLib, and it links it PRIVATE.
+add_library(tgcurl_td
+  src/td_placeholder.cpp
+)
+target_link_libraries(tgcurl_td PUBLIC tgcurl_core PRIVATE Td::TdStatic)
 
 # ---- Executable ------------------------------------------------------------
 add_executable(tgcurl src/main.cpp)
-target_link_libraries(tgcurl PRIVATE tgcurl_core)
+target_link_libraries(tgcurl PRIVATE tgcurl_td)
 
 if(TGCURL_STATIC)
   # Bundle the C++ runtime so the binary runs on hosts without matching
