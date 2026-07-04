@@ -172,13 +172,16 @@ release: rpm deb
 	@echo ">> Packages in $(DIST_DIR)/:"
 	@ls -1 $(DIST_DIR)/*.rpm $(DIST_DIR)/*.deb 2>/dev/null || true
 
+# nfpm does not expand env vars inside contents.src, so the binary path is a
+# literal (build/tgcurl) in nfpm.yaml; only ${VERSION} is taken from the env.
+# nfpm runs from the repo root so that relative path resolves.
 rpm: build check-tools
 	@mkdir -p $(DIST_DIR)
-	VERSION=$(VERSION) BIN=$(BIN) $(NFPM) pkg --config nfpm.yaml --packager rpm --target $(DIST_DIR)/
+	VERSION=$(VERSION) $(NFPM) pkg --config nfpm.yaml --packager rpm --target $(DIST_DIR)/
 
 deb: build check-tools
 	@mkdir -p $(DIST_DIR)
-	VERSION=$(VERSION) BIN=$(BIN) $(NFPM) pkg --config nfpm.yaml --packager deb --target $(DIST_DIR)/
+	VERSION=$(VERSION) $(NFPM) pkg --config nfpm.yaml --packager deb --target $(DIST_DIR)/
 
 # ----------------------------------------------------------------------------
 # Clean

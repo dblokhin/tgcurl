@@ -18,7 +18,9 @@ homepage: https://github.com/dblokhin/tgcurl
 license: MIT
 
 contents:
-  - src: ${BIN}
+  # Path is relative to the repo root (where `make release` runs nfpm); nfpm
+  # does not expand env vars inside contents.src, so this is a literal path.
+  - src: build/tgcurl
     dst: /usr/bin/tgcurl
     file_info:
       mode: 0755
