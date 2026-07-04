@@ -10,11 +10,12 @@ guessing — you get composable primitives that a program (or a person with `jq`
 
 ```console
 $ tgcurl send 123456789 "deploy finished ✅"
-{"ok":true,"message_id":184600002560}
+{"ok":true,"message_id":184600002560,"chat_id":123456789}
 ```
 
-> **Status:** early development. The design is finalized (see [`DESIGN.md`](./DESIGN.md)); the
-> implementation is in progress.
+> **Status:** all commands implemented (login/logout, contacts list/new/block, chats list,
+> chat, send). Pure logic is covered by `ctest`; the network round-trip is verified manually
+> against a real account (see *End-to-end verification* below). Design: [`DESIGN.md`](./DESIGN.md).
 
 ---
 
@@ -76,12 +77,13 @@ You also need **TDLib** available to the build. See *Building* below.
 ```console
 # 1. Log in (interactive, one time). Prompts for api_id/api_hash on first run,
 #    then phone number, the login code, and your 2FA password if enabled.
+#    (Prompts are written to stderr; only the JSON result goes to stdout.)
 $ tgcurl login
-{"ok":true,"user":{"id":42,"first_name":"Dmitriy","username":"dblokhin"}}
+{"ok":true,"user":{"user_id":42,"first_name":"Dmitriy","last_name":"","username":"dblokhin","phone":"15551234567"},"already":false}
 
 # Running it again is a no-op — the session is reused, no prompts:
 $ tgcurl login
-{"ok":true,"user":{"id":42,"first_name":"Dmitriy"},"already":true}
+{"ok":true,"user":{"user_id":42,"first_name":"Dmitriy","last_name":"","username":"dblokhin","phone":"15551234567"},"already":true}
 ```
 
 Credentials and session live under `~/.config/tgcurl/` (override with `TGCURL_CONFIG_DIR`):
@@ -131,7 +133,7 @@ $ tgcurl chat 42 --last 3
 
 # Send a message.
 $ tgcurl send @devteam "build is green"
-{"ok":true,"message_id":184600002560}
+{"ok":true,"message_id":184600002560,"chat_id":-100123}
 ```
 
 ### For AI agents
@@ -150,6 +152,51 @@ Errors are JSON on stderr with a non-zero exit, so they are easy to detect:
 $ tgcurl send "John Smith" "hi"; echo "exit=$?"
 {"error":"unresolvable","hint":"use chat_id from 'contacts list' / 'chats list', or a public @username"}
 exit=1
+```
+
+---
+
+## Testing & verification
+
+Pure logic is covered by an in-tree test suite (no external framework) run via `ctest`:
+
+```console
+make test
+```
+
+It exercises JSON output/escaping, config path resolution and `config.json`
+round-tripping (perms included), identifier classification (`classify`), the
+head-less prompter contract, and CLI-level dispatch (unknown/again/usage,
+head-less `login` not hanging, bad args and `unresolvable` failing before any
+network). Anything that hits Telegram's servers is **not** unit-tested — it's
+verified manually.
+
+### End-to-end verification (real account)
+
+The network path needs real credentials, so run this once by hand after a build:
+
+```console
+# 0. build links against TDLib
+make build
+
+# 1. get an api_id/api_hash at https://my.telegram.org/apps, then:
+tgcurl login                       # phone + code (+ 2FA) -> {"ok":true,...,"already":false}
+ls -l ~/.config/tgcurl             # config.json is 0600, td.db/ is 0700
+tgcurl login                       # -> "already":true, no prompts (session reuse)
+
+# 2. reads
+tgcurl contacts list | jq .        # array; every entry has a chat_id
+tgcurl chats list --limit 20 | jq. # array of {chat_id,title,type,username}
+
+# 3. write + read back
+tgcurl send "<chat_id>" "hello from tgcurl"   # -> {"ok":true,"message_id":...}
+tgcurl send "@some_public" "hi"               # @username path via searchPublicChat
+tgcurl chat "<chat_id>" --last 5 | jq .        # shows the sent message, newest-first
+
+# 4. negative paths
+tgcurl send "John Smith" "x"; echo $?          # {"error":"unresolvable",...}, exit 1
+TGCURL_CONFIG_DIR=$(mktemp -d) tgcurl contacts list </dev/null; echo $?
+                                               # no session -> error, exit 1, no stdin hang
 ```
 
 ---
