@@ -11,14 +11,15 @@
 #include "error.h"
 #include "json_out.h"
 #include "resolve.h"
+#include "send_confirm.h"
 #include "session.h"
 #include "tdclient.h"
 
 #include <chrono>
 #include <cstdint>
-#include <iostream>
 #include <memory>
 #include <optional>
+#include <ostream>
 #include <string>
 #include <td/telegram/td_api.h>
 #include <variant>
@@ -35,51 +36,11 @@ namespace {
 // How long to wait for the server to accept a queued message before giving up.
 constexpr double kSendTimeoutSeconds = 30.0;
 
-// Outcome of waiting for a sent message's terminal update.
-enum class SendOutcome : std::uint8_t { Succeeded, Failed, TimedOut };
-
-// Records the terminal send-result update for our message. The handler is
-// installed *before* sendMessage so a fast update can't be dispatched-and-
-// dropped before we start listening. updateMessageSendSucceeded /
-// updateMessageSendFailed both carry the temporary id in old_message_id_; we
-// key on that. seen becomes true once the matching update arrives.
-struct SendResult {
-    std::int64_t pending_id = 0; // set from the sendMessage response
-    bool have_pending_id = false;
-    bool seen = false;
-    SendOutcome outcome = SendOutcome::TimedOut;
-    std::string error;
-
-    void observe(const td_api::object_ptr<td_api::Object>& update) {
-        if (seen || !have_pending_id || update == nullptr) {
-            return;
-        }
-        if (update->get_id() == td_api::updateMessageSendSucceeded::ID) {
-            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
-            const auto& upd = static_cast<const td_api::updateMessageSendSucceeded&>(*update);
-            if (upd.old_message_id_ == pending_id) {
-                outcome = SendOutcome::Succeeded;
-                seen = true;
-            }
-        } else if (update->get_id() == td_api::updateMessageSendFailed::ID) {
-            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
-            const auto& upd = static_cast<const td_api::updateMessageSendFailed&>(*update);
-            if (upd.old_message_id_ == pending_id) {
-                outcome = SendOutcome::Failed;
-                error = upd.error_ != nullptr
-                            ? (std::to_string(upd.error_->code_) + ": " + upd.error_->message_)
-                            : "unknown send error";
-                seen = true;
-            }
-        }
-    }
-};
-
 } // namespace
 
 namespace commands {
 
-std::optional<Error> send(const Args& args) {
+std::optional<Error> send(const Args& args, std::ostream& out) {
     if (args.size() != 2) {
         return Error("usage", R"(send "<chat_id|@username>" "<text>")");
     }
@@ -118,11 +79,12 @@ std::optional<Error> send(const Args& args) {
     request->chat_id_ = chat_id;
     request->input_message_content_ = std::move(content);
 
-    // Install the result observer before sending so no terminal update can be
-    // dispatched and dropped between the response and when we start listening.
-    SendResult result_state;
+    // Install the confirmation observer before sending: it buffers a terminal
+    // update even if that update is dispatched while we're still waiting for
+    // the sendMessage response itself (see send_confirm.h).
+    SendConfirmation confirm;
     client.set_update_handler(
-        [&](td_api::object_ptr<td_api::Object> update) { result_state.observe(update); });
+        [&](td_api::object_ptr<td_api::Object> update) { confirm.observe(update); });
 
     Object result = client.send_query(std::move(request));
     if (is_error(result)) {
@@ -131,15 +93,15 @@ std::optional<Error> send(const Args& args) {
     // Safe downcast: sendMessage returns `message` on success.
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
     const auto& message = static_cast<const td_api::message&>(*result);
-    result_state.pending_id = message.id_;
-    result_state.have_pending_id = true;
+    const std::int64_t pending_id = message.id_;
+    confirm.set_pending_id(pending_id);
 
     // The message is only queued so far; wait for the server to accept it before
     // reporting success (and before the process exits, dropping the pending
     // send). Bounded by kSendTimeoutSeconds so a stuck send can't hang forever.
     const auto deadline =
         std::chrono::steady_clock::now() + std::chrono::duration<double>(kSendTimeoutSeconds);
-    while (!result_state.seen) {
+    while (!confirm.done()) {
         const double remaining =
             std::chrono::duration<double>(deadline - std::chrono::steady_clock::now()).count();
         if (remaining <= 0.0) {
@@ -148,21 +110,21 @@ std::optional<Error> send(const Args& args) {
         client.pump_updates(remaining);
     }
 
-    switch (result_state.outcome) {
-    case SendOutcome::Succeeded:
+    switch (confirm.outcome()) {
+    case SendConfirmation::Outcome::Succeeded:
         break;
-    case SendOutcome::Failed:
-        return Error("request_failed", "sendMessage: " + result_state.error);
-    case SendOutcome::TimedOut:
+    case SendConfirmation::Outcome::Failed:
+        return Error("request_failed", "sendMessage: " + confirm.error());
+    case SendConfirmation::Outcome::Pending:
         return Error("request_failed",
                      "sendMessage: timed out waiting for the server to accept the message");
     }
 
     json::Writer w;
     w.field("ok", true);
-    w.field("message_id", result_state.pending_id);
+    w.field("message_id", pending_id);
     w.field("chat_id", chat_id);
-    json::emit(w.object(), std::cout);
+    json::emit(w.object(), out);
     return std::nullopt;
 }
 

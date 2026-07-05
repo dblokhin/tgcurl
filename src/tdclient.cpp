@@ -65,10 +65,10 @@ TdClient::~TdClient() {
             // (request_id == 0) carrying authorizationStateClosed.
             if (response.request_id == 0 &&
                 response.object->get_id() == td_api::updateAuthorizationState::ID) {
+                const td_api::Object* obj = response.object.get();
                 // Safe downcast: get_id() matched updateAuthorizationState.
                 // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
-                const auto* upd =
-                    static_cast<const td_api::updateAuthorizationState*>(response.object.get());
+                const auto* upd = static_cast<const td_api::updateAuthorizationState*>(obj);
                 if (upd->authorization_state_ != nullptr &&
                     upd->authorization_state_->get_id() == td_api::authorizationStateClosed::ID) {
                     break;

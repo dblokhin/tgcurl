@@ -11,9 +11,9 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <iostream>
 #include <memory>
 #include <optional>
+#include <ostream>
 #include <string>
 #include <td/telegram/td_api.h>
 #include <variant>
@@ -124,7 +124,7 @@ std::string chat_json(TdClient& client, const td_api::chat& chat) {
 
 namespace commands {
 
-std::optional<Error> chats(const Args& args) {
+std::optional<Error> chats(const Args& args, std::ostream& out) {
     if (args.empty() || args[0] != "list") {
         return Error("usage", "chats list [--limit N]");
     }
@@ -166,7 +166,7 @@ std::optional<Error> chats(const Args& args) {
         arr.element(chat_json(client, static_cast<const td_api::chat&>(*chat_obj)));
     }
 
-    json::emit(arr.array(), std::cout);
+    json::emit(arr.array(), out);
     return std::nullopt;
 }
 

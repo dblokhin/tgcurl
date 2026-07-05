@@ -6,7 +6,8 @@ Unix-way CLI that an AI agent can drive** to perform Telegram tasks — *"`curl`
 
 It exposes small, composable, **JSON-only** primitives; a calling agent combines them (e.g.
 dump contacts, then decide which chat to message). Every invocation is one shot: connect, do
-one thing, print JSON, exit.
+one thing, print JSON, exit. The same primitives are also served as **MCP tools**
+(`tgcurl -mcp`, see *MCP mode*) so an agent runtime can call them without shelling out.
 
 ---
 
@@ -57,6 +58,48 @@ Because `tgcurl` is one-shot per command, we wrap this event loop in a small **s
 `send_query()` helper**: send a query, pump `receive()` until the matching response (or error)
 arrives, return it. This turns TDLib's event loop into blocking calls that fit a CLI, and is
 the central reuse point — every command and the auth flow go through it.
+
+### Asynchrony discipline — a response is not an acknowledgement
+
+The rule every command (current and future) must obey: **a command may not report success or
+exit until TDLib has confirmed the effect it claims** — because tgcurl is one-shot, process
+exit destroys any work TDLib still has queued.
+
+TDLib requests fall into two classes:
+
+1. **Round-trip requests** (`getContacts`, `importContacts`, `searchPublicChat`,
+   `setMessageSenderBlockList`, …): the response itself is the server's answer. `send_query()`
+   returning a non-error object *is* the confirmation — nothing more to wait for.
+2. **Fire-and-forget requests** — **`sendMessage` is the canonical case**: the response comes
+   back *immediately* with a **local, pending** message (temporary id); the server hasn't
+   accepted anything yet. The real outcome arrives later as an update —
+   `updateMessageSendSucceeded` / `updateMessageSendFailed`, carrying the temporary id in
+   `old_message_id_`. A process that exits after the response but before that update **silently
+   drops the message** (this was a real bug). Such commands must pump updates until the
+   terminal update for *their* request arrives (bounded by a timeout), and only then print
+   `{"ok":true}`.
+
+How this is kept from regressing:
+
+- The wait logic is not ad-hoc inside the command: it lives in **`src/send_confirm.h`
+  (`SendConfirmation`)** — install as the update handler *before* issuing `sendMessage`, feed
+  every update, then `set_pending_id()` from the response. It handles both orderings (the
+  terminal update may be dispatched *before* the response is processed — it is buffered and
+  replayed, not dropped) and is covered by a unit test (`tests/test_send_confirm.cpp`) that
+  pins the raced ordering as a regression guard.
+- **Checklist for any new command:** find the request in the td_api docs; if the result the
+  user cares about is delivered via an `update*` rather than the response (send/forward/edit,
+  file upload via `updateFile`, etc.), it is class 2 — reuse `SendConfirmation` or follow its
+  pattern (observe-before-send, match by id, bounded wait), and add the terminal-update wait
+  before reporting success.
+- On timeout the command reports `request_failed` *without* claiming the action didn't happen —
+  the server may still accept it later; the error text says so ("timed out waiting for the
+  server to accept").
+
+Related but distinct: the graceful `close` in `TdClient`'s destructor (pump until
+`authorizationStateClosed`) is what flushes TDLib's databases on exit; skipping it silently
+loses this run's peer cache. Both rules are two faces of the same fact — **TDLib is
+asynchronous; returning from `send()` proves nothing.**
 
 ---
 
@@ -176,7 +219,49 @@ All output is JSON. Identifier args (`<id>`) follow the resolution rules above.
 | `tgcurl contacts new <phone> <first> [last]` | `importContacts`.                                                                                    |
 | `tgcurl contacts block <id>`              | resolve → `setMessageSenderBlockList` (block).                                                          |
 | `tgcurl chat "<id>" --last N`             | resolve → `getChatHistory(limit=N)` → `[{id, date, is_outgoing, sender_id, text}]`, newest-first.       |
-| `tgcurl send "<id>" "<text>"`             | resolve → `sendMessage` (`inputMessageText`). `{"ok":true,"message_id":…}`.                             |
+| `tgcurl send "<id>" "<text>"`             | resolve → `sendMessage` (`inputMessageText`), then wait for the server ack (see *Asynchrony discipline*). `{"ok":true,"message_id":…}`. |
+| `tgcurl -mcp`                             | Long-running MCP stdio server exposing the same commands as tools (see *MCP mode*).                     |
+
+### One registry, two front-ends
+
+Every command is declared exactly once, in **`src/commands/registry.cpp`** — its CLI shape
+(command word + subcommand), its MCP tool name/description/parameter schema, and the handler
+(`optional<Error> fn(const Args&, std::ostream&)`; handlers write their JSON result to the
+given stream instead of assuming stdout, so any front-end can capture it). `main.cpp` derives
+its dispatch table from the registry; the MCP server derives `tools/list` and the
+`tools/call` argument mapping from the same entries. **Adding a command = one handler + one
+`CommandSpec`; it appears in both the CLI and MCP automatically**, and cannot drift between
+them. `tests/test_registry.cpp` checks the invariants (unique tool/CLI names, schema shape,
+argument mapping).
+
+---
+
+## MCP mode — `tgcurl -mcp`
+
+The same binary doubles as an **MCP (Model Context Protocol) server** so agent runtimes
+(Claude Code, etc.) can call Telegram primitives as first-class tools instead of shelling out.
+
+- **Transport:** MCP's stdio transport — JSON-RPC 2.0, one message per line; requests on
+  stdin, responses on stdout. This is why the "stdout = JSON only" rule matters doubly here:
+  protocol traffic owns stdout, logs/prompts stay on stderr.
+- **Surface:** implements `initialize`, `ping`, `tools/list`, `tools/call`. No resources/
+  prompts/notifications — tgcurl's capabilities are all verbs. Parsing uses the same in-house
+  `json_in.h` the config loader uses.
+- **Tools = registry entries.** Each `CommandSpec` with a non-empty tool name becomes a tool
+  (`contacts_list`, `contacts_new`, `contacts_block`, `chats_list`, `chat_history`,
+  `send_message`, `logout`); `tools/call` maps the named JSON arguments onto the CLI argv
+  shape and runs the *identical* handler, capturing its JSON output as the tool result text.
+  **`login` is deliberately not a tool** — it must prompt for phone/code/2FA on a TTY; the
+  session is created by a human running `tgcurl login` once, then the MCP server uses it.
+- **Errors:** protocol-level problems (unknown tool, missing/extra arguments) are JSON-RPC
+  errors (`-32602` …); a command failure is a *tool result* with `isError:true` carrying the
+  same `{"error","hint"}` JSON the CLI would print on stderr — the agent reads it and adapts,
+  the session keeps serving.
+- **Sessions stay one-shot.** Each `tools/call` opens and closes its own `TdClient` exactly
+  like a CLI invocation (same auth path, same graceful close/flush). Slightly slower per call,
+  but the CLI and MCP semantics — including the asynchrony discipline and the not_authorized
+  behavior — stay provably identical, and a wedged TDLib client can't poison a long-lived
+  server.
 
 ---
 
@@ -184,16 +269,20 @@ All output is JSON. Identifier args (`<id>`) follow the resolution rules above.
 
 ```
 CMakeLists.txt              // links Td::TdStatic (find_package(Td) or add_subdirectory(td))
-src/main.cpp                // subcommand dispatch, top-level arg parsing, JSON error wrapper
+src/main.cpp                // dispatch derived from the registry; -mcp entry; JSON error wrapper
 src/tdclient.h/.cpp         // ClientManager wrapper: create, send/receive, sync send_query()
 src/auth.h/.cpp             // authorization state-machine; interactive vs headless modes
 src/config.h/.cpp           // load/save config.json; resolve config dir (XDG + TGCURL_CONFIG_DIR)
 src/resolve.h/.cpp          // resolveId(arg) -> chat_id: numeric passthrough / @username / error
+src/send_confirm.h          // SendConfirmation: wait-for-server-ack rule for sendMessage
+src/mcp.h/.cpp              // MCP stdio server: JSON-RPC loop over the registry
+src/commands/registry.h/.cpp// THE command table: CLI shape + MCP tool + handler, once per command
 src/commands/contacts.cpp   // list / new / block
 src/commands/chats.cpp      // chats list (getChats)
 src/commands/chat.cpp       // history -> JSON
-src/commands/send.cpp       // send message
-src/json_out.h              // emit(...) to stdout; emit_error(...) to stderr + exit code
+src/commands/send.cpp       // send message (+ ack wait)
+src/json_out.h              // JSON writer: emit(...) / emit_error(...) + exit code
+src/json_in.h/.cpp          // strict minimal JSON parser (config.json, MCP requests)
 README.md                   // build steps, my.telegram.org registration, agent-usage examples
 ```
 

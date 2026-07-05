@@ -1,5 +1,7 @@
 #include "auth.h"
 
+#include "tgcurl_version.h"
+
 #include <string>
 #include <td/telegram/td_api.h>
 #include <utility>
@@ -51,7 +53,7 @@ td_api::object_ptr<td_api::setTdlibParameters> make_parameters(const Config& con
     params->system_language_code_ = "en";
     params->device_model_ = kDeviceModel;
     params->system_version_ = kSystemVersion;
-    params->application_version_ = "0.1.0";
+    params->application_version_ = version();
     return params;
 }
 

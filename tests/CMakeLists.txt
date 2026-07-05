@@ -4,6 +4,11 @@ add_executable(test_json_out test_json_out.cpp)
 target_link_libraries(test_json_out PRIVATE tgcurl_core)
 add_test(NAME json_out COMMAND test_json_out)
 
+# json_in is pure logic in the core library.
+add_executable(test_json_in test_json_in.cpp)
+target_link_libraries(test_json_in PRIVATE tgcurl_core)
+add_test(NAME json_in COMMAND test_json_in)
+
 # config is pure logic (no TDLib); links the core library.
 add_executable(test_config test_config.cpp)
 target_link_libraries(test_config PRIVATE tgcurl_core)
@@ -23,6 +28,17 @@ add_test(NAME auth COMMAND test_auth)
 add_executable(test_resolve test_resolve.cpp)
 target_link_libraries(test_resolve PRIVATE tgcurl_td)
 add_test(NAME resolve COMMAND test_resolve)
+
+# send_confirm codifies the async send-acknowledgement rule (works with
+# td_api objects but no network).
+add_executable(test_send_confirm test_send_confirm.cpp)
+target_link_libraries(test_send_confirm PRIVATE tgcurl_td)
+add_test(NAME send_confirm COMMAND test_send_confirm)
+
+# The command registry (single source for CLI dispatch and MCP tools).
+add_executable(test_registry test_registry.cpp)
+target_link_libraries(test_registry PRIVATE tgcurl_td)
+add_test(NAME registry COMMAND test_registry)
 
 # --- CLI-level dispatch checks (exercise the real binary) -------------------
 # Unknown subcommand -> non-zero exit and a JSON error on stderr.
@@ -109,5 +125,14 @@ add_test(NAME cli_contacts_block_unresolvable
   COMMAND ${CMAKE_COMMAND}
     -DTGCURL=$<TARGET_FILE:tgcurl>
     -DMODE=contacts_block_unresolvable
+    -DCMAKE_CURRENT_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_checks.cmake)
+
+# -mcp: JSON-RPC handshake, tools/list from the registry, a pre-network
+# failing tools/call as an isError result, clean exit on EOF.
+add_test(NAME cli_mcp
+  COMMAND ${CMAKE_COMMAND}
+    -DTGCURL=$<TARGET_FILE:tgcurl>
+    -DMODE=mcp
     -DCMAKE_CURRENT_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
     -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_checks.cmake)

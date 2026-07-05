@@ -1,18 +1,18 @@
 #include "config.h"
 
+#include "json_in.h"
 #include "json_out.h"
 
-#include <cctype>
 #include <cerrno>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <exception>
 #include <fcntl.h>
 #include <fstream>
 #include <string>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <variant>
 
 namespace tgcurl {
 
@@ -32,253 +32,53 @@ const char* env_nonempty(const char* name) {
     return nullptr;
 }
 
-// --- Minimal JSON reader for the fixed config shape -------------------------
-// config.json is written by tgcurl itself and holds exactly two fields:
+// Validate a parsed config.json against its fixed shape:
 //   { "api_id": <int>, "api_hash": "<string>" }
-// Rather than take a JSON dependency (json_out.h is write-only), we hand-parse
-// this narrow, known shape. It tolerates surrounding whitespace and either key
-// order but rejects anything it doesn't understand, surfacing config_invalid.
-
-// A tiny cursor over the input string (holds a pointer so it stays copyable
-// and assignable, and to satisfy no-ref-member linting).
-struct Cursor {
-    const std::string* s;
-    std::size_t i = 0;
-
-    explicit Cursor(const std::string& str) : s(&str) {}
-
-    void skip_ws() {
-        while (i < s->size() && (std::isspace(static_cast<unsigned char>((*s)[i])) != 0)) {
-            ++i;
-        }
-    }
-    [[nodiscard]] bool eof() const { return i >= s->size(); }
-    [[nodiscard]] char peek() const { return (*s)[i]; }
-    char take() { return (*s)[i++]; }
-};
-
-// Decode a hex digit; returns -1 if not a hex digit.
-int hex_val(char ch) {
-    if (ch >= '0' && ch <= '9') {
-        return ch - '0';
-    }
-    if (ch >= 'a' && ch <= 'f') {
-        return ch - 'a' + 10;
-    }
-    if (ch >= 'A' && ch <= 'F') {
-        return ch - 'A' + 10;
-    }
-    return -1;
-}
-
-// Handle the character after a backslash, appending the decoded byte to `out`.
-// The cursor is positioned just past the backslash on entry.
-bool parse_escape(Cursor& c, std::string& out) {
-    if (c.eof()) {
-        return false;
-    }
-    switch (c.take()) {
-    case '"':
-        out.push_back('"');
-        return true;
-    case '\\':
-        out.push_back('\\');
-        return true;
-    case '/':
-        out.push_back('/');
-        return true;
-    case 'b':
-        out.push_back('\b');
-        return true;
-    case 'f':
-        out.push_back('\f');
-        return true;
-    case 'n':
-        out.push_back('\n');
-        return true;
-    case 'r':
-        out.push_back('\r');
-        return true;
-    case 't':
-        out.push_back('\t');
-        return true;
-    case 'u': {
-        // \uXXXX — accept the ASCII range json_out.h emits (control chars
-        // < 0x20); higher code points aren't produced by us, so refuse them
-        // rather than mangle multi-byte output.
-        if (c.i + 4 > c.s->size()) {
-            return false;
-        }
-        int code = 0;
-        for (int k = 0; k < 4; ++k) {
-            int digit = hex_val(c.take());
-            if (digit < 0) {
-                return false;
-            }
-            code = (code << 4) | digit;
-        }
-        if (code > 0x7F) {
-            return false;
-        }
-        out.push_back(static_cast<char>(code));
-        return true;
-    }
-    default:
-        return false;
-    }
-}
-
-// Parse a JSON string literal at the cursor into `out`. On entry the cursor
-// must be at the opening quote. Handles the escapes json_out.h can emit.
-bool parse_string(Cursor& c, std::string& out) {
-    if (c.eof() || c.peek() != '"') {
-        return false;
-    }
-    ++c.i; // opening quote
-    out.clear();
-    while (!c.eof()) {
-        char ch = c.take();
-        if (ch == '"') {
-            return true;
-        }
-        if (ch == '\\') {
-            if (!parse_escape(c, out)) {
-                return false;
-            }
-        } else {
-            out.push_back(ch);
-        }
-    }
-    return false; // unterminated string
-}
-
-// Parse a JSON integer at the cursor into `out`.
-bool parse_int(Cursor& c, std::int64_t& out) {
-    c.skip_ws();
-    std::size_t start = c.i;
-    if (!c.eof() && (c.peek() == '-' || c.peek() == '+')) {
-        ++c.i;
-    }
-    std::size_t digits_start = c.i;
-    while (!c.eof() && (std::isdigit(static_cast<unsigned char>(c.peek())) != 0)) {
-        ++c.i;
-    }
-    if (c.i == digits_start) {
-        return false; // no digits
-    }
-    // Reject fractional/exponent forms — api_id is an integer.
-    if (!c.eof() && (c.peek() == '.' || c.peek() == 'e' || c.peek() == 'E')) {
-        return false;
-    }
-    const std::string tok = c.s->substr(start, c.i - start);
-    try {
-        std::size_t consumed = 0;
-        long long value = std::stoll(tok, &consumed, 10);
-        if (consumed != tok.size()) {
-            return false; // trailing junk in the token
-        }
-        out = static_cast<std::int64_t>(value);
-        return true;
-    } catch (const std::exception&) {
-        return false; // out of range or not a number
-    }
-}
-
-// Accumulator for the fields seen while parsing the config object.
-struct ConfigFields {
-    bool have_api_id = false;
-    bool have_api_hash = false;
-    std::int64_t api_id = 0;
-    std::string api_hash;
-};
-
-// Parse one "<key>": <value> pair at the cursor into `fields`. The cursor is
-// positioned at the opening quote of the key. Returns a reason string on error.
-std::optional<std::string> parse_field(Cursor& c, ConfigFields& fields) {
-    std::string key;
-    if (!parse_string(c, key)) {
-        return "expected string key";
-    }
-    c.skip_ws();
-    if (c.eof() || c.peek() != ':') {
-        return "expected ':' after key";
-    }
-    ++c.i;
-    c.skip_ws();
-
-    if (key == "api_id") {
-        if (!parse_int(c, fields.api_id)) {
-            return "api_id must be an integer";
-        }
-        if (fields.api_id <= 0 || fields.api_id > INT32_MAX) {
-            return "api_id out of range";
-        }
-        fields.have_api_id = true;
-        return std::nullopt;
-    }
-    if (key == "api_hash") {
-        if (!parse_string(c, fields.api_hash)) {
-            return "api_hash must be a string";
-        }
-        fields.have_api_hash = true;
-        return std::nullopt;
-    }
-    return "unknown key: " + key;
-}
-
-// Parse the whole config object. On success fills `config`; on failure returns
-// a reason string.
+// Either key order is fine; anything else (unknown keys, wrong types, missing
+// fields) is rejected, surfacing config_invalid. On success fills `config`;
+// on failure returns a reason string.
 std::optional<std::string> parse_config(const std::string& text, Config& config) {
-    Cursor c{text};
-    c.skip_ws();
-    if (c.eof() || c.peek() != '{') {
+    std::variant<json::Value, std::string> parsed = json::parse(text);
+    if (std::holds_alternative<std::string>(parsed)) {
+        return std::get<std::string>(parsed);
+    }
+    const json::Value& root = std::get<json::Value>(parsed);
+    if (root.type != json::Value::Type::Object) {
         return "expected object";
     }
-    ++c.i;
 
-    ConfigFields fields;
-
-    c.skip_ws();
-    if (!c.eof() && c.peek() == '}') {
-        ++c.i;
-        return "missing api_id and api_hash";
+    bool have_api_id = false;
+    bool have_api_hash = false;
+    for (const auto& [key, value] : root.members) {
+        if (key == "api_id") {
+            std::optional<std::int64_t> id = value.as_int64();
+            if (!id.has_value()) {
+                return "api_id must be an integer";
+            }
+            if (*id <= 0 || *id > INT32_MAX) {
+                return "api_id out of range";
+            }
+            config.api_id = static_cast<int>(*id);
+            have_api_id = true;
+        } else if (key == "api_hash") {
+            if (value.type != json::Value::Type::String) {
+                return "api_hash must be a string";
+            }
+            config.api_hash = value.text;
+            have_api_hash = true;
+        } else {
+            return "unknown key: " + key;
+        }
     }
-
-    while (true) {
-        c.skip_ws();
-        if (std::optional<std::string> why = parse_field(c, fields)) {
-            return why;
-        }
-        c.skip_ws();
-        if (c.eof()) {
-            return "unterminated object";
-        }
-        char sep = c.take();
-        if (sep == ',') {
-            continue;
-        }
-        if (sep == '}') {
-            break;
-        }
-        return "expected ',' or '}'";
-    }
-
-    c.skip_ws();
-    if (!c.eof()) {
-        return "trailing data after object";
-    }
-    if (!fields.have_api_id) {
+    if (!have_api_id) {
         return "missing api_id";
     }
-    if (!fields.have_api_hash) {
+    if (!have_api_hash) {
         return "missing api_hash";
     }
-    if (fields.api_hash.empty()) {
+    if (config.api_hash.empty()) {
         return "api_hash is empty";
     }
-
-    config.api_id = static_cast<int>(fields.api_id);
-    config.api_hash = fields.api_hash;
     return std::nullopt;
 }
 

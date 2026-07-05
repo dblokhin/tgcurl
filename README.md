@@ -154,6 +154,21 @@ $ tgcurl send "John Smith" "hi"; echo "exit=$?"
 exit=1
 ```
 
+### MCP server mode
+
+`tgcurl -mcp` serves the same commands as **MCP tools** over stdio (JSON-RPC 2.0), so agent
+runtimes can call Telegram primitives natively instead of shelling out. Log in once with
+`tgcurl login` first; then, e.g. for Claude Code:
+
+```console
+$ claude mcp add telegram -- tgcurl -mcp
+```
+
+Exposed tools: `contacts_list`, `contacts_new`, `contacts_block`, `chats_list`,
+`chat_history`, `send_message`, `logout` (everything except the interactive `login`). Each
+tool call is the same one-shot handler as the CLI subcommand; results and errors carry the
+same JSON. See DESIGN.md → *MCP mode*.
+
 ---
 
 ## Testing & verification

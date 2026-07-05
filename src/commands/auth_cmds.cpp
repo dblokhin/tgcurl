@@ -132,7 +132,7 @@ std::variant<std::string, Error> fetch_me(TdClient& client) {
 
 namespace commands {
 
-std::optional<Error> login(const Args& /*args*/) {
+std::optional<Error> login(const Args& /*args*/, std::ostream& out) {
     std::variant<Config, Error> cfg = load_or_create_config();
     if (std::holds_alternative<Error>(cfg)) {
         return std::get<Error>(cfg);
@@ -162,11 +162,11 @@ std::optional<Error> login(const Args& /*args*/) {
     w.field("ok", true);
     w.raw_field("user", std::get<std::string>(me));
     w.field("already", result.already);
-    json::emit(w.object(), std::cout);
+    json::emit(w.object(), out);
     return std::nullopt;
 }
 
-std::optional<Error> logout(const Args& /*args*/) {
+std::optional<Error> logout(const Args& /*args*/, std::ostream& out) {
     std::variant<Config, Error> cfg = load_config();
     if (std::holds_alternative<Error>(cfg)) {
         // No config → nothing to log out of, but still clear any db remnants.
@@ -174,21 +174,26 @@ std::optional<Error> logout(const Args& /*args*/) {
         std::filesystem::remove_all(database_dir(), ec);
         json::Writer w;
         w.field("ok", true);
-        json::emit(w.object(), std::cout);
+        json::emit(w.object(), out);
         return std::nullopt;
     }
     const Config& config = std::get<Config>(cfg);
 
     // Reach at least a parameters-set client so logOut can be issued. Use a
     // head-less prompter: if there's no session, there's nothing to log out —
-    // we still clear the db and report ok.
-    TdClient client;
-    HeadlessPrompter prompter;
-    AuthResult result = authenticate(client, config, prompter);
-    if (result.authorized) {
-        Object out = client.send_query(td_api::make_object<td_api::logOut>());
-        if (is_error(out)) {
-            return Error("auth_failed", "logOut: " + error_text(out));
+    // we still clear the db and report ok. Scoped so the client's destructor
+    // (graceful close, which flushes TDLib's databases to disk) runs BEFORE
+    // remove_all below; the other order would let the close re-create session
+    // files inside the directory we just cleared.
+    {
+        TdClient client;
+        HeadlessPrompter prompter;
+        AuthResult result = authenticate(client, config, prompter);
+        if (result.authorized) {
+            Object out = client.send_query(td_api::make_object<td_api::logOut>());
+            if (is_error(out)) {
+                return Error("auth_failed", "logOut: " + error_text(out));
+            }
         }
     }
 
@@ -198,7 +203,7 @@ std::optional<Error> logout(const Args& /*args*/) {
 
     json::Writer w;
     w.field("ok", true);
-    json::emit(w.object(), std::cout);
+    json::emit(w.object(), out);
     return std::nullopt;
 }
 

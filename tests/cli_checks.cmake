@@ -21,10 +21,15 @@
 #                      constructed and the flow reaches the phone prompt; asserts
 #                      stderr carries NO TDLib logs (they are silenced by
 #                      default, otherwise they'd bury the prompts).
+#   mcp              - `-mcp` with an initialize/tools-list/tools-call script on
+#                      stdin: the JSON-RPC handshake answers, tools/list carries
+#                      the registry, a tools/call that fails pre-network returns
+#                      an isError result, and EOF exits 0. Runs against an empty
+#                      config dir — none of this needs a session.
 
 # Auth modes run against a throwaway, empty config directory so they never
 # touch a real session and start from a known "no config" state.
-if(MODE MATCHES "^(login_headless|logout_noconfig|chats_bad_limit|contacts_bad_sub|send_unresolvable|chat_unresolvable|contacts_new_bad|contacts_block_unresolvable|login_quiet)$")
+if(MODE MATCHES "^(login_headless|logout_noconfig|chats_bad_limit|contacts_bad_sub|send_unresolvable|chat_unresolvable|contacts_new_bad|contacts_block_unresolvable|login_quiet|mcp)$")
   set(SCRATCH "${CMAKE_CURRENT_BINARY_DIR}/cli_scratch_${MODE}")
   file(REMOVE_RECURSE "${SCRATCH}")
   set(ENV{TGCURL_CONFIG_DIR} "${SCRATCH}")
@@ -57,14 +62,33 @@ elseif(MODE STREQUAL "contacts_block_unresolvable")
   set(ARGS "contacts;block;John Smith")
 elseif(MODE STREQUAL "login_quiet")
   set(ARGS "login")
+elseif(MODE STREQUAL "mcp")
+  set(ARGS "-mcp")
 else() # usage: no args
   set(ARGS "")
 endif()
 
 # Feed an empty stdin (via a written-empty file) so `login` sees immediate EOF
 # rather than a live TTY — this is the "head-less" condition we assert on.
+# The mcp mode instead feeds a scripted JSON-RPC session.
 set(EMPTY_IN "${CMAKE_CURRENT_BINARY_DIR}/cli_empty_stdin")
 file(WRITE "${EMPTY_IN}" "")
+if(MODE STREQUAL "mcp")
+  set(EMPTY_IN "${CMAKE_CURRENT_BINARY_DIR}/cli_mcp_stdin")
+  file(WRITE "${EMPTY_IN}" "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"ctest\",\"version\":\"0\"}}}
+{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}
+{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}
+{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"send_message\",\"arguments\":{\"id\":\"John Smith\",\"text\":\"hello\"}}}
+")
+endif()
+
+# login_quiet spins up a real TDLib client that talks to the network before the
+# prompt appears; under a loaded machine that alone can take >20s, so it gets a
+# larger budget (a timeout kills the process silently and fails the test).
+set(RUN_TIMEOUT 20)
+if(MODE STREQUAL "login_quiet")
+  set(RUN_TIMEOUT 60)
+endif()
 
 execute_process(
   COMMAND ${TGCURL} ${ARGS}
@@ -72,7 +96,38 @@ execute_process(
   RESULT_VARIABLE code
   OUTPUT_VARIABLE out
   ERROR_VARIABLE err
-  TIMEOUT 20)
+  TIMEOUT ${RUN_TIMEOUT})
+
+if(MODE STREQUAL "mcp")
+  # Clean shutdown on EOF.
+  if(NOT code EQUAL 0)
+    message(FATAL_ERROR "mcp: expected exit 0, got ${code}; err=${err}")
+  endif()
+  # initialize answered with our server info.
+  if(NOT out MATCHES "\"serverInfo\":{\"name\":\"tgcurl\"")
+    message(FATAL_ERROR "mcp: initialize response missing serverInfo; got: ${out}")
+  endif()
+  # tools/list exposes the registry (spot-check two tools and a schema).
+  if(NOT out MATCHES "\"name\":\"send_message\"" OR NOT out MATCHES "\"name\":\"contacts_list\"")
+    message(FATAL_ERROR "mcp: tools/list missing expected tools; got: ${out}")
+  endif()
+  if(NOT out MATCHES "\"inputSchema\":{\"type\":\"object\"")
+    message(FATAL_ERROR "mcp: tools/list missing inputSchema; got: ${out}")
+  endif()
+  # login must NOT be exposed as a tool (interactive-only).
+  if(out MATCHES "\"name\":\"login\"")
+    message(FATAL_ERROR "mcp: login must not be an MCP tool; got: ${out}")
+  endif()
+  # The failing tools/call surfaces as an isError result, not a dead session.
+  if(NOT out MATCHES "\"isError\":true" OR NOT out MATCHES "unresolvable")
+    message(FATAL_ERROR "mcp: expected an isError unresolvable tool result; got: ${out}")
+  endif()
+  # Protocol traffic stays off stderr.
+  if(err MATCHES "jsonrpc")
+    message(FATAL_ERROR "mcp: JSON-RPC leaked onto stderr; got: ${err}")
+  endif()
+  return()
+endif()
 
 if(MODE STREQUAL "logout_noconfig")
   # Success path: exit 0 and {"ok":true} on stdout.

@@ -12,9 +12,9 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <iostream>
 #include <memory>
 #include <optional>
+#include <ostream>
 #include <string>
 #include <td/telegram/td_api.h>
 #include <variant>
@@ -108,7 +108,7 @@ std::string message_json(const td_api::message& msg) {
 
 namespace commands {
 
-std::optional<Error> chat(const Args& args) {
+std::optional<Error> chat(const Args& args, std::ostream& out) {
     std::variant<ChatArgs, Error> parsed = parse_chat_args(args);
     if (std::holds_alternative<Error>(parsed)) {
         return std::get<Error>(parsed);
@@ -157,7 +157,7 @@ std::optional<Error> chat(const Args& args) {
             arr.element(message_json(*msg));
         }
     }
-    json::emit(arr.array(), std::cout);
+    json::emit(arr.array(), out);
     return std::nullopt;
 }
 

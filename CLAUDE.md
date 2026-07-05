@@ -7,7 +7,8 @@ Operational guide for working in this repo. Architecture and rationale live in
 
 `tgcurl` — a terminal-only, **JSON-only** CLI for a personal Telegram account (not a bot),
 **C++17** on Telegram's official **TDLib** (`td::ClientManager`). One-shot per command:
-connect, do one thing, print JSON, exit.
+connect, do one thing, print JSON, exit. `tgcurl -mcp` serves the same commands as MCP tools
+over stdio.
 
 ## Commands
 
@@ -30,15 +31,24 @@ DESIGN.md → *Build*. `make build` exports `compile_commands.json` for clangd/c
 
 ## Layout
 
-`src/main.cpp` dispatch · `src/tdclient.*` sync wrapper over TDLib (central reuse point) ·
-`src/auth.*` login state machine · `src/config.*` · `src/resolve.*` id→chat_id ·
-`src/commands/*` one file per command · `src/json_out.h` output. Build in `build/`, packages in
-`dist/`.
+`src/main.cpp` dispatch (derived from the registry) · `src/tdclient.*` sync wrapper over TDLib
+(central reuse point) · `src/auth.*` login state machine · `src/config.*` · `src/resolve.*`
+id→chat_id · `src/commands/registry.*` THE command table (CLI + MCP, one entry per command) ·
+`src/commands/*` one file per command · `src/mcp.*` MCP stdio server · `src/send_confirm.h`
+server-ack wait for sends · `src/json_out.h` / `src/json_in.*` JSON out/in. Build in `build/`,
+packages in `dist/`.
 
 ## Conventions
 
 - **Output is JSON, always.** Success on stdout; errors as JSON on stderr with a non-zero exit.
   Never prompt on stdin outside `login` — other commands run head-less.
+- **New command = one handler + one `CommandSpec` in `src/commands/registry.cpp`.** Both
+  front-ends (CLI dispatch and MCP tools) derive from that table — never wire a command into
+  only one of them. Handlers write to the `std::ostream&` they're given, not `std::cout`.
+- **TDLib is asynchronous — a response is not a server ack.** If the effect arrives via an
+  `update*` (like `sendMessage` → `updateMessageSendSucceeded/Failed`), the command must wait
+  for that terminal update before reporting success (see DESIGN.md → *Asynchrony discipline*;
+  reuse `src/send_confirm.h`'s pattern).
 - **`chat_id` is the primary identifier.** `@username` resolves via `searchPublicChat`; anything
   non-numeric / non-`@` is an `unresolvable` error. No fuzzy name matching.
 - Secrets never enter the repo. Session lives in `~/.config/tgcurl/` (or `TGCURL_CONFIG_DIR`).

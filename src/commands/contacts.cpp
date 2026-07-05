@@ -11,9 +11,9 @@
 #include "tdclient.h"
 
 #include <cstdint>
-#include <iostream>
 #include <memory>
 #include <optional>
+#include <ostream>
 #include <string>
 #include <td/telegram/td_api.h>
 #include <utility>
@@ -42,7 +42,7 @@ std::string contact_json(const td_api::user& user, std::int64_t chat_id) {
 }
 
 // contacts list: dump the whole address book.
-std::optional<Error> do_list(TdClient& client) {
+std::optional<Error> do_list(TdClient& client, std::ostream& out) {
     Object contacts_obj = client.send_query(td_api::make_object<td_api::getContacts>());
     if (is_error(contacts_obj)) {
         return Error("request_failed", "getContacts: " + error_text(contacts_obj));
@@ -75,12 +75,12 @@ std::optional<Error> do_list(TdClient& client) {
         arr.element(contact_json(user, chat_id));
     }
 
-    json::emit(arr.array(), std::cout);
+    json::emit(arr.array(), out);
     return std::nullopt;
 }
 
 // contacts new <phone> <first> [last]: import a single contact.
-std::optional<Error> do_new(TdClient& client, const Args& args) {
+std::optional<Error> do_new(TdClient& client, const Args& args, std::ostream& out) {
     // args: ["new", <phone>, <first>, [last]]
     if (args.size() < 3 || args.size() > 4) {
         return Error("usage", "contacts new <phone> <first_name> [last_name]");
@@ -124,7 +124,7 @@ std::optional<Error> do_new(TdClient& client, const Args& args) {
     w.field("ok", true);
     w.field("user_id", user_id);
     w.field("chat_id", chat_id);
-    json::emit(w.object(), std::cout);
+    json::emit(w.object(), out);
     return std::nullopt;
 }
 
@@ -145,7 +145,7 @@ td_api::object_ptr<td_api::MessageSender> sender_for_chat(TdClient& client, std:
 }
 
 // contacts block <id>: block a chat_id or @username.
-std::optional<Error> do_block(TdClient& client, const Args& args) {
+std::optional<Error> do_block(TdClient& client, const Args& args, std::ostream& out) {
     // args: ["block", <id>]
     if (args.size() != 2) {
         return Error("usage", "contacts block <chat_id|@username>");
@@ -168,7 +168,7 @@ std::optional<Error> do_block(TdClient& client, const Args& args) {
 
     json::Writer w;
     w.field("ok", true);
-    json::emit(w.object(), std::cout);
+    json::emit(w.object(), out);
     return std::nullopt;
 }
 
@@ -176,7 +176,7 @@ std::optional<Error> do_block(TdClient& client, const Args& args) {
 
 namespace commands {
 
-std::optional<Error> contacts(const Args& args) {
+std::optional<Error> contacts(const Args& args, std::ostream& out) {
     if (args.empty()) {
         return Error("usage", "contacts <list|new|block> ...");
     }
@@ -209,12 +209,12 @@ std::optional<Error> contacts(const Args& args) {
     TdClient& client = *std::get<std::unique_ptr<TdClient>>(session);
 
     if (sub == "list") {
-        return do_list(client);
+        return do_list(client, out);
     }
     if (sub == "new") {
-        return do_new(client, args);
+        return do_new(client, args, out);
     }
-    return do_block(client, args);
+    return do_block(client, args, out);
 }
 
 } // namespace commands

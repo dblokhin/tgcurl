@@ -24,6 +24,7 @@ find_package(Td 1.8.63 REQUIRED)
 # Td here — anything touching TDLib belongs in tgcurl_td below.
 add_library(tgcurl_core
   src/tgcurl_version.cpp
+  src/json_in.cpp
   src/config.cpp
 )
 target_include_directories(tgcurl_core PUBLIC src)
@@ -42,6 +43,8 @@ add_library(tgcurl_td
   src/auth.cpp
   src/session.cpp
   src/resolve.cpp
+  src/mcp.cpp
+  src/commands/registry.cpp
   src/commands/auth_cmds.cpp
   src/commands/contacts.cpp
   src/commands/chats.cpp
