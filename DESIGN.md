@@ -244,7 +244,9 @@ The same binary doubles as an **MCP (Model Context Protocol) server** so agent r
 
 - **Transport:** MCP's stdio transport — JSON-RPC 2.0, one message per line; requests on
   stdin, responses on stdout. This is why the "stdout = JSON only" rule matters doubly here:
-  protocol traffic owns stdout, logs/prompts stay on stderr.
+  protocol traffic owns stdout, logs/prompts stay on stderr — including the human-facing
+  "MCP server ready" startup notice, so a manual `tgcurl -mcp` isn't a silent terminal but
+  the protocol stream stays clean.
 - **Surface:** implements `initialize`, `ping`, `tools/list`, `tools/call`. No resources/
   prompts/notifications — tgcurl's capabilities are all verbs. Parsing uses the same in-house
   `json_in.h` the config loader uses.

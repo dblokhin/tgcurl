@@ -163,11 +163,38 @@ exit=1
 ### MCP server mode
 
 `tgcurl -mcp` serves the same commands as **MCP tools** over stdio (JSON-RPC 2.0), so agent
-runtimes can call Telegram primitives natively instead of shelling out. Log in once with
-`tgcurl login` first; then, e.g. for Claude Code:
+runtimes can call Telegram primitives natively instead of shelling out.
+
+**1. Log in once (the MCP server itself never prompts):**
+
+```console
+$ tgcurl login
+$ tgcurl status     # verify: {"authorized":true,"user":{...}}
+```
+
+**2. Register the server in your agent runtime.** The server is *launched by the client* —
+you normally don't run it yourself. For Claude Code:
 
 ```console
 $ claude mcp add telegram -- tgcurl -mcp
+```
+
+For any other MCP client, the generic stdio-server config shape is:
+
+```json
+{
+  "mcpServers": {
+    "telegram": { "command": "tgcurl", "args": ["-mcp"] }
+  }
+}
+```
+
+**3. (optional) Sanity-check by hand.** Started manually, the server logs a readiness notice
+to stderr (stdout is reserved for the protocol) and waits for JSON-RPC on stdin:
+
+```console
+$ tgcurl -mcp
+tgcurl 0.1.0: MCP server ready (stdio transport, JSON-RPC per line); waiting for an MCP client on stdin. Ctrl+C or EOF stops it.
 ```
 
 Exposed tools: `contacts_list`, `contacts_new`, `contacts_block`, `chats_list`,

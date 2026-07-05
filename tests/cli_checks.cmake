@@ -129,9 +129,16 @@ if(MODE STREQUAL "mcp")
   if(NOT out MATCHES "\"isError\":true" OR NOT out MATCHES "unresolvable")
     message(FATAL_ERROR "mcp: expected an isError unresolvable tool result; got: ${out}")
   endif()
-  # Protocol traffic stays off stderr.
+  # Protocol traffic stays off stderr; the human-facing startup notice is ON
+  # stderr (stdout would corrupt the protocol stream).
   if(err MATCHES "jsonrpc")
     message(FATAL_ERROR "mcp: JSON-RPC leaked onto stderr; got: ${err}")
+  endif()
+  if(NOT err MATCHES "MCP server ready")
+    message(FATAL_ERROR "mcp: expected the startup notice on stderr; got: ${err}")
+  endif()
+  if(out MATCHES "MCP server ready")
+    message(FATAL_ERROR "mcp: startup notice leaked onto stdout (protocol stream); got: ${out}")
   endif()
   return()
 endif()

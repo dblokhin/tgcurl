@@ -6,6 +6,7 @@
 #include "json_out.h"
 #include "tgcurl_version.h"
 
+#include <iostream>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -243,6 +244,13 @@ void handle_message(std::ostream& out, const json::Value& request) {
 } // namespace
 
 int serve(std::istream& in, std::ostream& out) {
+    // Startup notice goes to STDERR: stdout belongs to the protocol, and a
+    // human running `tgcurl -mcp` by hand would otherwise stare at a silent
+    // terminal wondering whether anything started.
+    std::cerr << "tgcurl " << version()
+              << ": MCP server ready (stdio transport, JSON-RPC per line); "
+                 "waiting for an MCP client on stdin. Ctrl+C or EOF stops it.\n";
+
     std::string line;
     while (std::getline(in, line)) {
         if (line.empty()) {
@@ -255,6 +263,7 @@ int serve(std::istream& in, std::ostream& out) {
         }
         handle_message(out, std::get<json::Value>(parsed));
     }
+    std::cerr << "tgcurl: MCP client disconnected; shutting down.\n";
     return 0; // EOF: client closed the pipe — clean shutdown
 }
 
