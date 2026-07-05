@@ -69,14 +69,14 @@ You also need **TDLib** available to the build. See *Building* below.
 
 ### Docker
 
-A Debian-based multi-stage image, fully version-pinned for reproducible builds: the base is
-a Debian *point-release* tag and TDLib is compiled at a **pinned commit** (there is no
-prebuilt TDLib package in the Debian repositories — the pinned commit is the same one the
-Fedora copr 1.8.63 package is built from). Same inputs, same image.
+A multi-stage image that installs TDLib as a **prebuilt, version-pinned RPM** — no TDLib
+compilation during the image build, so it finishes in minutes. Debian would be the preferred
+base, but no Debian/Ubuntu repository ships a TDLib package; the only packaged channel is the
+Fedora copr `stevenlin/tdlib-master`, so the image is Fedora-based (pinned release tag). All
+versions are fixed: same inputs, same image.
 
 ```console
-# Compiles TDLib from source — takes a while, needs ~4 GB RAM.
-# Bump the TDLib pin deliberately with:  --build-arg TDLIB_REF=<sha>
+# Bump the TDLib pin deliberately with:  --build-arg TDLIB_PKG_VERSION=<NEVR>
 $ docker build -t tgcurl .
 ```
 

@@ -314,9 +314,10 @@ README.md                   // build steps, my.telegram.org registration, agent-
   takes `linkPreviewOptions`, and blocking uses `setMessageSenderBlockList(blockListMain)`.
 - **TDLib build prerequisites:** C++17 compiler (GCC ≥ 7 / Clang ≥ 5), OpenSSL, zlib, gperf,
   CMake.
-- **TDLib provisioning:** a system-installed TDLib (`find_package(Td)`) for native builds
-  (Fedora: the copr, see above — Debian ships no TDLib package at all). The `Dockerfile` is a
-  version-pinned multi-stage Debian build: TDLib compiled from source at a pinned commit (the
-  same commit the copr 1.8.63 package is built from), linked statically into tgcurl; the
-  runtime stage is the identical Debian point release plus `libssl3`, with the session under
-  a `/data` volume (`TGCURL_CONFIG_DIR=/data`). See README → *Docker*.
+- **TDLib provisioning:** always the prebuilt package, never an in-tree compile. Native
+  builds: a system-installed TDLib (`find_package(Td)`; Fedora — the copr above; Debian ships
+  no TDLib package at all). The `Dockerfile` follows the same rule: a pinned Fedora tag whose
+  build stage installs the copr `tdlib-static` RPM at an exact pinned version (NEVR) and
+  compiles only tgcurl; the runtime stage is the identical Fedora tag plus the single
+  static-TDLib binary, with the session under a `/data` volume (`TGCURL_CONFIG_DIR=/data`).
+  See README → *Docker*.
