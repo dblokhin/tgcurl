@@ -70,31 +70,51 @@ You also need **TDLib** available to the build. See *Building* below.
 ### Docker
 
 A small Alpine-based image (multi-stage build; the runtime layer is Alpine + one static
-binary). The session lives in `/data` — always mount a volume there, or the login is lost
-with the container:
+binary).
 
 ```console
 # Build the image (compiles TDLib from source — takes a while, needs ~4 GB RAM;
 # pin a TDLib commit with --build-arg TDLIB_REF=<sha> for reproducible images).
 $ docker build -t tgcurl .
-
-# 1. Log in once, interactively (-it), into a named volume:
-$ docker run -it --rm -v tgcurl-data:/data tgcurl login
-
-# 2. Use any command; the default (no args) is `status`:
-$ docker run --rm -v tgcurl-data:/data tgcurl
-{"authorized":true,"user":{...}}
-$ docker run --rm -v tgcurl-data:/data tgcurl contacts list
-$ docker run --rm -v tgcurl-data:/data tgcurl send <chat_id> "hi from docker"
-
-# MCP server mode (stdio → keep stdin open with -i, no TTY needed):
-$ docker run -i --rm -v tgcurl-data:/data tgcurl -mcp
-# e.g. registered in Claude Code:
-$ claude mcp add telegram -- docker run -i --rm -v tgcurl-data:/data tgcurl -mcp
 ```
 
-The container runs as an unprivileged user (uid 1000); with a bind mount instead of a named
-volume, make the directory writable by that uid: `chown 1000 <dir>`.
+**All application state — `config.json` (api_id/api_hash) and the TDLib session database
+(`td.db/`) — lives in `/data` inside the container** (`TGCURL_CONFIG_DIR=/data`). Mount a
+host directory there and the state lives *outside* Docker: containers stay disposable
+(`--rm`), the image can be rebuilt, updated or restarted freely, and the login survives it
+all. Without the mount, the session dies with the container and every run would demand a
+fresh login.
+
+```console
+# One-time setup: a host directory for tgcurl's state. The container runs as
+# uid 1000, so that uid must own the directory. Perms 0700: it holds secrets.
+$ mkdir -p ~/tgcurl-data && chmod 700 ~/tgcurl-data && sudo chown 1000 ~/tgcurl-data
+
+# 1. Log in once, interactively (-it writes the session into the mount):
+$ docker run -it --rm -v ~/tgcurl-data:/data tgcurl login
+
+# 2. Run any command with the same mount; the default (no args) is `status`:
+$ docker run --rm -v ~/tgcurl-data:/data tgcurl
+{"authorized":true,"user":{...}}
+$ docker run --rm -v ~/tgcurl-data:/data tgcurl contacts list
+$ docker run --rm -v ~/tgcurl-data:/data tgcurl chats list --limit 10
+$ docker run --rm -v ~/tgcurl-data:/data tgcurl send <chat_id> "hi from docker"
+
+# Restart/rebuild-proof: remove every container, rebuild the image — the state
+# is still in ~/tgcurl-data, so this still answers authorized:true, no login:
+$ docker run --rm -v ~/tgcurl-data:/data tgcurl status
+```
+
+MCP server mode over stdio — keep stdin open with `-i` (no TTY needed):
+
+```console
+$ docker run -i --rm -v ~/tgcurl-data:/data tgcurl -mcp
+# e.g. registered in Claude Code:
+$ claude mcp add telegram -- docker run -i --rm -v ~/tgcurl-data:/data tgcurl -mcp
+```
+
+A Docker **named volume** works too, if you prefer Docker to manage the location
+(`-v tgcurl-data:/data` everywhere instead of the host path — no chown needed).
 
 ---
 
