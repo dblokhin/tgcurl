@@ -67,6 +67,35 @@ sudo make install
 
 You also need **TDLib** available to the build. See *Building* below.
 
+### Docker
+
+A small Alpine-based image (multi-stage build; the runtime layer is Alpine + one static
+binary). The session lives in `/data` — always mount a volume there, or the login is lost
+with the container:
+
+```console
+# Build the image (compiles TDLib from source — takes a while, needs ~4 GB RAM;
+# pin a TDLib commit with --build-arg TDLIB_REF=<sha> for reproducible images).
+$ docker build -t tgcurl .
+
+# 1. Log in once, interactively (-it), into a named volume:
+$ docker run -it --rm -v tgcurl-data:/data tgcurl login
+
+# 2. Use any command; the default (no args) is `status`:
+$ docker run --rm -v tgcurl-data:/data tgcurl
+{"authorized":true,"user":{...}}
+$ docker run --rm -v tgcurl-data:/data tgcurl contacts list
+$ docker run --rm -v tgcurl-data:/data tgcurl send <chat_id> "hi from docker"
+
+# MCP server mode (stdio → keep stdin open with -i, no TTY needed):
+$ docker run -i --rm -v tgcurl-data:/data tgcurl -mcp
+# e.g. registered in Claude Code:
+$ claude mcp add telegram -- docker run -i --rm -v tgcurl-data:/data tgcurl -mcp
+```
+
+The container runs as an unprivileged user (uid 1000); with a bind mount instead of a named
+volume, make the directory writable by that uid: `chown 1000 <dir>`.
+
 ---
 
 ## Quick start

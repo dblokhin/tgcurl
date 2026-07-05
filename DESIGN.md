@@ -314,6 +314,7 @@ README.md                   // build steps, my.telegram.org registration, agent-
   takes `linkPreviewOptions`, and blocking uses `setMessageSenderBlockList(blockListMain)`.
 - **TDLib build prerequisites:** C++17 compiler (GCC ≥ 7 / Clang ≥ 5), OpenSSL, zlib, gperf,
   CMake.
-- **TDLib provisioning:** deferred. Either a system-installed TDLib (`find_package(Td)`) or a
-  vendored / from-source build (Dockerfile with static linking for a self-contained binary).
-  Documented in the README once chosen.
+- **TDLib provisioning:** a system-installed TDLib (`find_package(Td)`) for native builds;
+  the `Dockerfile` builds TDLib from source (musl, fully static) in a multi-stage image whose
+  runtime layer is Alpine plus the single tgcurl binary, with the session under a `/data`
+  volume (`TGCURL_CONFIG_DIR=/data`). See README → *Docker*.

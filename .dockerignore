@@ -1,0 +1,14 @@
+# Keep the build context minimal: only sources and CMake files matter.
+build/
+dist/
+.git/
+.cache/
+.claude/
+compile_commands.json
+*.md
+LICENSE
+AUTHORS
+Makefile
+nfpm.yaml
+.clang-format
+.clang-tidy
