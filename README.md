@@ -69,12 +69,14 @@ You also need **TDLib** available to the build. See *Building* below.
 
 ### Docker
 
-A small Alpine-based image (multi-stage build; the runtime layer is Alpine + one static
-binary).
+A Debian-based multi-stage image, fully version-pinned for reproducible builds: the base is
+a Debian *point-release* tag and TDLib is compiled at a **pinned commit** (there is no
+prebuilt TDLib package in the Debian repositories — the pinned commit is the same one the
+Fedora copr 1.8.63 package is built from). Same inputs, same image.
 
 ```console
-# Build the image (compiles TDLib from source — takes a while, needs ~4 GB RAM;
-# pin a TDLib commit with --build-arg TDLIB_REF=<sha> for reproducible images).
+# Compiles TDLib from source — takes a while, needs ~4 GB RAM.
+# Bump the TDLib pin deliberately with:  --build-arg TDLIB_REF=<sha>
 $ docker build -t tgcurl .
 ```
 
