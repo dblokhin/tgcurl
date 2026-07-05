@@ -214,6 +214,7 @@ All output is JSON. Identifier args (`<id>`) follow the resolution rules above.
 |-------------------------------------------|--------------------------------------------------------------------------------------------------------|
 | `tgcurl login`                            | Idempotent. Prompts for api_id/api_hash if config absent, then phone/code/2FA on a TTY. `{"ok":true,"user":{…}}`. |
 | `tgcurl logout`                           | `logOut` + clear `td.db/`. `{"ok":true}`.                                                               |
+| `tgcurl status`                           | Session diagnostic, never prompts. `{"authorized":true,"user":{…}}` or `{"authorized":false,…}` — both exit 0: "not logged in" is the answer, not an error. |
 | `tgcurl contacts list`                    | `getContacts` → `[{user_id, chat_id, username, phone, first_name, last_name}]`. `chat_id` is the key field. |
 | `tgcurl chats list [--limit N]`           | `getChats` → `[{chat_id, title, type, username}]` for recent dialogs (groups/channels too).             |
 | `tgcurl contacts new <phone> <first> [last]` | `importContacts`.                                                                                    |
@@ -249,10 +250,23 @@ The same binary doubles as an **MCP (Model Context Protocol) server** so agent r
   `json_in.h` the config loader uses.
 - **Tools = registry entries.** Each `CommandSpec` with a non-empty tool name becomes a tool
   (`contacts_list`, `contacts_new`, `contacts_block`, `chats_list`, `chat_history`,
-  `send_message`, `logout`); `tools/call` maps the named JSON arguments onto the CLI argv
-  shape and runs the *identical* handler, capturing its JSON output as the tool result text.
-  **`login` is deliberately not a tool** — it must prompt for phone/code/2FA on a TTY; the
-  session is created by a human running `tgcurl login` once, then the MCP server uses it.
+  `send_message`); `tools/call` maps the named JSON arguments onto the CLI argv shape and
+  runs the *identical* handler, capturing its JSON output as the tool result text.
+
+### CLI-only commands
+
+The **session lifecycle** belongs to the human, not the agent, so these commands have an
+empty tool name in the registry and never appear over MCP:
+
+| Command  | Why CLI-only                                                                        |
+|----------|-------------------------------------------------------------------------------------|
+| `login`  | Must prompt for phone/code/2FA on a TTY; a head-less front-end cannot satisfy that. |
+| `logout` | Destroys the session every front-end (including the MCP server itself) depends on; only a human re-running `login` can restore it. An agent must never be able to lock itself — and its owner — out. |
+| `status` | The human-side diagnostic for the above ("am I logged in, and as whom") — used when setting the session up for an agent, not by the agent. |
+
+The session is created once by a human (`tgcurl login`), checked with `tgcurl status`, and
+then the MCP server just uses it. Everything *else* in the registry is exposed as a tool —
+new commands are agent-facing by default.
 - **Errors:** protocol-level problems (unknown tool, missing/extra arguments) are JSON-RPC
   errors (`-32602` …); a command failure is a *tool result* with `isError:true` carrying the
   same `{"error","hint"}` JSON the CLI would print on stderr — the agent reads it and adapts,

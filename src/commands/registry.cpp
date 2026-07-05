@@ -10,6 +10,7 @@ namespace tgcurl {
 namespace commands {
 std::optional<Error> login(const Args& args, std::ostream& out);
 std::optional<Error> logout(const Args& args, std::ostream& out);
+std::optional<Error> status(const Args& args, std::ostream& out);
 std::optional<Error> contacts(const Args& args, std::ostream& out);
 std::optional<Error> chats(const Args& args, std::ostream& out);
 std::optional<Error> chat(const Args& args, std::ostream& out);
@@ -24,8 +25,11 @@ constexpr const char* kIdDescription =
 std::vector<CommandSpec> make_registry() {
     std::vector<CommandSpec> specs;
 
-    // login is CLI-only (tool = ""): it prompts for phone/code/2FA on a TTY,
-    // which no head-less front-end can satisfy.
+    // The session-lifecycle commands are CLI-only (tool = ""): login prompts
+    // for phone/code/2FA on a TTY, which no head-less front-end can satisfy;
+    // logout destroys the session every front-end depends on and only a human
+    // (re-running login) can restore it; status is the human-side diagnostic
+    // for that lifecycle. See DESIGN.md -> MCP mode -> CLI-only commands.
     specs.push_back({"login",
                      "",
                      "",
@@ -35,11 +39,18 @@ std::vector<CommandSpec> make_registry() {
 
     specs.push_back({"logout",
                      "",
-                     "logout",
-                     "End the Telegram session and clear the local session database; a human "
-                     "must run 'tgcurl login' before the account is usable again",
+                     "",
+                     "End the Telegram session and clear the local session database",
                      {},
                      commands::logout});
+
+    specs.push_back({"status",
+                     "",
+                     "",
+                     "Report whether a usable session exists and, if so, the account it "
+                     "belongs to; never prompts",
+                     {},
+                     commands::status});
 
     specs.push_back({"contacts",
                      "list",

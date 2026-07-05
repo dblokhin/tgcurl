@@ -80,6 +80,14 @@ add_test(NAME cli_logout_noconfig
     -DCMAKE_CURRENT_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
     -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_checks.cmake)
 
+# status with empty config -> {"authorized":false}, exit 0, no prompt.
+add_test(NAME cli_status_noconfig
+  COMMAND ${CMAKE_COMMAND}
+    -DTGCURL=$<TARGET_FILE:tgcurl>
+    -DMODE=status_noconfig
+    -DCMAKE_CURRENT_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_checks.cmake)
+
 # chats list with a bad --limit -> usage error (validated before any network).
 add_test(NAME cli_chats_bad_limit
   COMMAND ${CMAKE_COMMAND}

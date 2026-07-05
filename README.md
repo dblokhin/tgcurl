@@ -102,6 +102,12 @@ or `chats list`) or a public **`@username`**.
 $ tgcurl login       # idempotent; see Quick start
 $ tgcurl logout      # end the session and clear ~/.config/tgcurl/td.db
 {"ok":true}
+
+# Is there a usable session, and whose? Never prompts; exit 0 either way.
+$ tgcurl status
+{"authorized":true,"user":{"user_id":42,"first_name":"Alice","last_name":"","username":"alice","phone":"15551234567"}}
+$ tgcurl status      # after logout
+{"authorized":false,"hint":"run: tgcurl login"}
 ```
 
 ### Contacts
@@ -165,9 +171,10 @@ $ claude mcp add telegram -- tgcurl -mcp
 ```
 
 Exposed tools: `contacts_list`, `contacts_new`, `contacts_block`, `chats_list`,
-`chat_history`, `send_message`, `logout` (everything except the interactive `login`). Each
-tool call is the same one-shot handler as the CLI subcommand; results and errors carry the
-same JSON. See DESIGN.md → *MCP mode*.
+`chat_history`, `send_message`. The session-lifecycle commands (`login`, `logout`, `status`)
+are CLI-only — the session is created and managed by a human, agents just use it. Each tool
+call is the same one-shot handler as the CLI subcommand; results and errors carry the same
+JSON. See DESIGN.md → *MCP mode*.
 
 ---
 

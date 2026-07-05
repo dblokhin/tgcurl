@@ -1,9 +1,11 @@
-// login / logout commands.
+// login / logout / status commands — the session lifecycle.
 //
 // login runs the authorization flow (interactively on a TTY) and, if it isn't
 // already authorized, prompts for the credentials it needs; on success it
 // prints the authenticated user. logout ends the session and clears the local
-// database. Both are the only commands allowed to touch stdin.
+// database. status reports whether a usable session exists (and as whom),
+// without prompting and without failing on "not logged in" — that state is its
+// answer, not an error. login is the only command allowed to touch stdin.
 #include "auth.h"
 #include "config.h"
 #include "error.h"
@@ -190,9 +192,9 @@ std::optional<Error> logout(const Args& /*args*/, std::ostream& out) {
         HeadlessPrompter prompter;
         AuthResult result = authenticate(client, config, prompter);
         if (result.authorized) {
-            Object out = client.send_query(td_api::make_object<td_api::logOut>());
-            if (is_error(out)) {
-                return Error("auth_failed", "logOut: " + error_text(out));
+            Object resp = client.send_query(td_api::make_object<td_api::logOut>());
+            if (is_error(resp)) {
+                return Error("auth_failed", "logOut: " + error_text(resp));
             }
         }
     }
@@ -203,6 +205,52 @@ std::optional<Error> logout(const Args& /*args*/, std::ostream& out) {
 
     json::Writer w;
     w.field("ok", true);
+    json::emit(w.object(), out);
+    return std::nullopt;
+}
+
+std::optional<Error> status(const Args& /*args*/, std::ostream& out) {
+    // "Not logged in" is this command's answer, not a failure — so both
+    // no-session outcomes print {"authorized":false} and exit 0. Only a
+    // malformed config or an unexpected auth error is a real error.
+    auto not_authorized = [&out]() -> std::optional<Error> {
+        json::Writer w;
+        w.field("authorized", false);
+        w.field("hint", "run: tgcurl login");
+        json::emit(w.object(), out);
+        return std::nullopt;
+    };
+
+    std::variant<Config, Error> cfg = load_config();
+    if (std::holds_alternative<Error>(cfg)) {
+        if (std::get<Error>(cfg).code() == "config_missing") {
+            return not_authorized();
+        }
+        return std::get<Error>(cfg); // config_invalid etc. — a real problem
+    }
+    const Config& config = std::get<Config>(cfg);
+
+    TdClient client;
+    HeadlessPrompter prompter;
+    AuthResult result = authenticate(client, config, prompter);
+    if (!result.authorized) {
+        // A head-less flow that needs input == no usable session.
+        if (result.error.has_value() && result.error->code() == "not_authorized") {
+            return not_authorized();
+        }
+        return result.error.has_value()
+                   ? result.error
+                   : std::optional<Error>(Error("auth_failed", "authorization did not complete"));
+    }
+
+    std::variant<std::string, Error> me = fetch_me(client);
+    if (std::holds_alternative<Error>(me)) {
+        return std::get<Error>(me);
+    }
+
+    json::Writer w;
+    w.field("authorized", true);
+    w.raw_field("user", std::get<std::string>(me));
     json::emit(w.object(), out);
     return std::nullopt;
 }

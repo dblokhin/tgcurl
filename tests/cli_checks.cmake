@@ -9,6 +9,9 @@
 #                      runs never block waiting on stdin).
 #   logout_noconfig  - `logout` with an empty config dir prints {"ok":true} and
 #                      exits 0 (nothing to log out of; db cleared).
+#   status_noconfig  - `status` with an empty config dir prints
+#                      {"authorized":false,...} and exits 0 without prompting
+#                      ("not logged in" is the answer, not an error).
 #   chats_bad_limit  - `chats list --limit abc` -> usage error before any
 #                      network (arg validation runs first).
 #   contacts_bad_sub - `contacts frobnicate` -> usage error.
@@ -29,7 +32,7 @@
 
 # Auth modes run against a throwaway, empty config directory so they never
 # touch a real session and start from a known "no config" state.
-if(MODE MATCHES "^(login_headless|logout_noconfig|chats_bad_limit|contacts_bad_sub|send_unresolvable|chat_unresolvable|contacts_new_bad|contacts_block_unresolvable|login_quiet|mcp)$")
+if(MODE MATCHES "^(login_headless|logout_noconfig|status_noconfig|chats_bad_limit|contacts_bad_sub|send_unresolvable|chat_unresolvable|contacts_new_bad|contacts_block_unresolvable|login_quiet|mcp)$")
   set(SCRATCH "${CMAKE_CURRENT_BINARY_DIR}/cli_scratch_${MODE}")
   file(REMOVE_RECURSE "${SCRATCH}")
   set(ENV{TGCURL_CONFIG_DIR} "${SCRATCH}")
@@ -48,6 +51,8 @@ elseif(MODE STREQUAL "login_headless")
   set(ARGS "login")
 elseif(MODE STREQUAL "logout_noconfig")
   set(ARGS "logout")
+elseif(MODE STREQUAL "status_noconfig")
+  set(ARGS "status")
 elseif(MODE STREQUAL "chats_bad_limit")
   set(ARGS "chats;list;--limit;abc")
 elseif(MODE STREQUAL "contacts_bad_sub")
@@ -114,10 +119,12 @@ if(MODE STREQUAL "mcp")
   if(NOT out MATCHES "\"inputSchema\":{\"type\":\"object\"")
     message(FATAL_ERROR "mcp: tools/list missing inputSchema; got: ${out}")
   endif()
-  # login must NOT be exposed as a tool (interactive-only).
-  if(out MATCHES "\"name\":\"login\"")
-    message(FATAL_ERROR "mcp: login must not be an MCP tool; got: ${out}")
-  endif()
+  # The session-lifecycle commands must NOT be exposed as tools (CLI-only).
+  foreach(cli_only login logout status)
+    if(out MATCHES "\"name\":\"${cli_only}\"")
+      message(FATAL_ERROR "mcp: ${cli_only} must not be an MCP tool; got: ${out}")
+    endif()
+  endforeach()
   # The failing tools/call surfaces as an isError result, not a dead session.
   if(NOT out MATCHES "\"isError\":true" OR NOT out MATCHES "unresolvable")
     message(FATAL_ERROR "mcp: expected an isError unresolvable tool result; got: ${out}")
@@ -136,6 +143,17 @@ if(MODE STREQUAL "logout_noconfig")
   endif()
   if(NOT out MATCHES "\"ok\":true")
     message(FATAL_ERROR "logout_noconfig: expected {\"ok\":true} on stdout; got: ${out}")
+  endif()
+  return()
+endif()
+
+if(MODE STREQUAL "status_noconfig")
+  # Success path: "not logged in" is the answer, not an error.
+  if(NOT code EQUAL 0)
+    message(FATAL_ERROR "status_noconfig: expected exit 0, got ${code}; err=${err}")
+  endif()
+  if(NOT out MATCHES "\"authorized\":false")
+    message(FATAL_ERROR "status_noconfig: expected {\"authorized\":false} on stdout; got: ${out}")
   endif()
   return()
 endif()

@@ -67,13 +67,16 @@ int main() {
                 }
             }
         }
-        // The full surface is registered (login CLI-only, the rest as tools).
-        CHECK(cli.count("login ") == 1);
-        for (const char* tool : {"logout", "contacts_list", "contacts_new", "contacts_block",
-                                 "chats_list", "chat_history", "send_message"}) {
+        // The full surface is registered: the session-lifecycle commands are
+        // CLI-only, everything else is also an MCP tool.
+        for (const char* cli_only : {"login", "logout", "status"}) {
+            CHECK(cli.count(std::string(cli_only) + " ") == 1);
+            CHECK(by_tool(cli_only) == nullptr);
+        }
+        for (const char* tool : {"contacts_list", "contacts_new", "contacts_block", "chats_list",
+                                 "chat_history", "send_message"}) {
             CHECK(by_tool(tool) != nullptr);
         }
-        CHECK(by_tool("login") == nullptr);
     }
 
     // --- inputSchema generation -------------------------------------------
