@@ -52,6 +52,7 @@ add_library(tgcurl_td
   src/commands/send.cpp
   src/commands/sendfile.cpp
   src/commands/search.cpp
+  src/commands/read.cpp
 )
 target_link_libraries(tgcurl_td PUBLIC tgcurl_core PRIVATE Td::TdStatic)
 # Propagate only TDLib's include directories (not the link) to consumers.

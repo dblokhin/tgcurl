@@ -203,6 +203,10 @@ $ tgcurl send @devteam "on it" --reply-to 184600002560
 $ tgcurl sendfile @devteam ./report.pdf "June report"
 {"ok":true,"message_id":184600003072,"chat_id":-100123}
 
+# Mark a chat as read (so `chats list --unread` stops reporting it):
+$ tgcurl read -100123
+{"ok":true,"chat_id":-100123,"read_up_to":184600003072}
+
 # Search messages: inside one chat (--chat) or across all chats.
 $ tgcurl search "invoice" --chat 42 --limit 5
 {"total_count":2,"messages":[{"id":1846,"chat_id":42,"date":1751600000,"is_outgoing":false,"sender_id":42,"type":"document","text":"invoice for June","reply_to_message_id":0},...]}

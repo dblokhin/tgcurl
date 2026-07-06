@@ -75,7 +75,7 @@ int main() {
         }
         for (const char* tool :
              {"contacts_list", "contacts_new", "contacts_block", "chats_list", "chat_history",
-              "send_message", "search_messages", "send_file"}) {
+              "send_message", "search_messages", "send_file", "mark_read"}) {
             CHECK(by_tool(tool) != nullptr);
         }
     }

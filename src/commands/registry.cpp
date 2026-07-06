@@ -17,6 +17,7 @@ std::optional<Error> chat(const Args& args, std::ostream& out);
 std::optional<Error> send(const Args& args, std::ostream& out);
 std::optional<Error> sendfile(const Args& args, std::ostream& out);
 std::optional<Error> search(const Args& args, std::ostream& out);
+std::optional<Error> read(const Args& args, std::ostream& out);
 } // namespace commands
 
 namespace {
@@ -157,6 +158,16 @@ std::vector<CommandSpec> make_registry() {
              {"caption", ParamSpec::Type::String, false, "caption shown with the document", ""},
          },
          commands::sendfile});
+
+    specs.push_back({"read",
+                     "",
+                     "mark_read",
+                     "Mark a chat as read (clears its unread counter) so it stops showing up "
+                     "in chats_list unread=true; returns {ok, chat_id, read_up_to}",
+                     {
+                         {"id", ParamSpec::Type::String, true, kIdDescription, ""},
+                     },
+                     commands::read});
 
     return specs;
 }
