@@ -125,6 +125,11 @@ int main() {
         CHECK_EQ(joined(r), "-100123 --last 5");
         auto r2 = build_cli_args(*hist, {{"id", "-100123"}});
         CHECK_EQ(joined(r2), "-100123");
+        // Pagination cursor and the service-message switch.
+        auto r3 = build_cli_args(*hist, {{"id", "-100123"}, {"before", "777"}, {"all", "true"}});
+        CHECK_EQ(joined(r3), "-100123 --before 777 --all");
+        auto r4 = build_cli_args(*hist, {{"id", "-100123"}, {"all", "false"}});
+        CHECK_EQ(joined(r4), "-100123");
     }
     {
         const CommandSpec* chats = by_tool("chats_list");
@@ -153,12 +158,25 @@ int main() {
         CHECK_EQ(joined(r2), "42 /tmp/r.pdf report");
     }
     {
-        // search: positional query + two optional flags.
+        // search: positional query + optional flags, incl. the pagination cursor.
         const CommandSpec* search = by_tool("search_messages");
         auto r = build_cli_args(*search, {{"query", "deploy"}});
         CHECK_EQ(joined(r), "deploy");
         auto r2 = build_cli_args(*search, {{"limit", "5"}, {"query", "deploy"}, {"chat_id", "@dev"}});
         CHECK_EQ(joined(r2), "deploy --chat @dev --limit 5");
+        auto r3 = build_cli_args(*search, {{"query", "deploy"}, {"offset", "abc123"}});
+        CHECK_EQ(joined(r3), "deploy --offset abc123");
+    }
+    {
+        // Paged listings: offset flags for chats and contacts.
+        const CommandSpec* chats = by_tool("chats_list");
+        auto r = build_cli_args(*chats, {{"limit", "50"}, {"offset", "50"}});
+        CHECK_EQ(joined(r), "list --limit 50 --offset 50");
+        const CommandSpec* contacts = by_tool("contacts_list");
+        auto r2 = build_cli_args(*contacts, {{"limit", "100"}, {"offset", "200"}});
+        CHECK_EQ(joined(r2), "list --limit 100 --offset 200");
+        auto r3 = build_cli_args(*contacts, {});
+        CHECK_EQ(joined(r3), "list");
     }
 
     // --- Mapping errors ------------------------------------------------------

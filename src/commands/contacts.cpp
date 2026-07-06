@@ -2,6 +2,8 @@
 //
 // list  — getContacts → per user getUser + createPrivateChat → JSON array of
 //         {user_id, chat_id, username, phone, first_name, last_name}.
+//         Paged: --limit N (default 100) caps the page, --offset N skips the
+//         first N contacts — a huge address book never lands in one response.
 // new   — importContacts(phone, first, [last]) → {ok, user_id, chat_id}.
 // block — resolve id → setMessageSenderBlockList(blockListMain) → {ok:true}.
 #include "error.h"
@@ -10,6 +12,7 @@
 #include "session.h"
 #include "tdclient.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -28,6 +31,58 @@ namespace td_api = td::td_api;
 
 namespace {
 
+constexpr int kDefaultListLimit = 100;
+constexpr int kMaxListLimit = 1000;
+
+struct ListArgs {
+    int limit = kDefaultListLimit;
+    int offset = 0;
+};
+
+// A non-negative integer option value, or nullopt when malformed.
+std::optional<int> parse_non_negative(const std::string& value) {
+    try {
+        std::size_t consumed = 0;
+        const int parsed = std::stoi(value, &consumed);
+        if (consumed != value.size() || parsed < 0) {
+            return std::nullopt;
+        }
+        return parsed;
+    } catch (const std::exception&) {
+        return std::nullopt;
+    }
+}
+
+// Parse `contacts list [--limit N] [--offset N]`.
+std::variant<ListArgs, Error> parse_list_args(const Args& args) {
+    // args[0] is "list"; anything after is options.
+    ListArgs out;
+    for (std::size_t i = 1; i < args.size(); ++i) {
+        if (args[i] == "--limit") {
+            if (i + 1 >= args.size()) {
+                return Error("usage", "--limit needs a value");
+            }
+            std::optional<int> limit = parse_non_negative(args[++i]);
+            if (!limit.has_value() || *limit == 0) {
+                return Error("usage", "--limit must be a positive integer");
+            }
+            out.limit = std::min(*limit, kMaxListLimit);
+        } else if (args[i] == "--offset") {
+            if (i + 1 >= args.size()) {
+                return Error("usage", "--offset needs a value");
+            }
+            std::optional<int> offset = parse_non_negative(args[++i]);
+            if (!offset.has_value()) {
+                return Error("usage", "--offset must be a non-negative integer");
+            }
+            out.offset = *offset;
+        } else {
+            return Error("usage", "unknown option: " + args[i]);
+        }
+    }
+    return out;
+}
+
 // Build the JSON object for one contact. chat_id is 0 if its private chat
 // couldn't be created (rare; the entry is still emitted so the set is complete).
 std::string contact_json(const td_api::user& user, std::int64_t chat_id) {
@@ -41,8 +96,10 @@ std::string contact_json(const td_api::user& user, std::int64_t chat_id) {
     return w.object();
 }
 
-// contacts list: dump the whole address book.
-std::optional<Error> do_list(TdClient& client, std::ostream& out) {
+// contacts list: one page of the address book (see parse_list_args).
+// getContacts itself only returns ids — cheap; the per-user getUser +
+// createPrivateChat round-trips (and the JSON) are what the page bounds.
+std::optional<Error> do_list(TdClient& client, const ListArgs& la, std::ostream& out) {
     Object contacts_obj = client.send_query(td_api::make_object<td_api::getContacts>());
     if (is_error(contacts_obj)) {
         return Error("request_failed", "getContacts: " + error_text(contacts_obj));
@@ -51,8 +108,14 @@ std::optional<Error> do_list(TdClient& client, std::ostream& out) {
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
     const auto& users = static_cast<const td_api::users&>(*contacts_obj);
 
+    const auto begin =
+        std::min<std::size_t>(static_cast<std::size_t>(la.offset), users.user_ids_.size());
+    const auto end =
+        std::min<std::size_t>(begin + static_cast<std::size_t>(la.limit), users.user_ids_.size());
+
     json::ArrayWriter arr;
-    for (std::int64_t user_id : users.user_ids_) {
+    for (std::size_t idx = begin; idx < end; ++idx) {
+        const std::int64_t user_id = users.user_ids_[idx];
         Object user_obj = client.send_query(td_api::make_object<td_api::getUser>(user_id));
         if (is_error(user_obj)) {
             return Error("request_failed", "getUser: " + error_text(user_obj));
@@ -201,6 +264,13 @@ std::optional<Error> contacts(const Args& args, std::ostream& out) {
     if (sub == "block" && args.size() != 2) {
         return Error("usage", "contacts block <chat_id|@username>");
     }
+    std::variant<ListArgs, Error> list_args;
+    if (sub == "list") {
+        list_args = parse_list_args(args);
+        if (std::holds_alternative<Error>(list_args)) {
+            return std::get<Error>(list_args);
+        }
+    }
 
     std::variant<std::unique_ptr<TdClient>, Error> session = open_session();
     if (std::holds_alternative<Error>(session)) {
@@ -209,7 +279,7 @@ std::optional<Error> contacts(const Args& args, std::ostream& out) {
     TdClient& client = *std::get<std::unique_ptr<TdClient>>(session);
 
     if (sub == "list") {
-        return do_list(client, out);
+        return do_list(client, std::get<ListArgs>(list_args), out);
     }
     if (sub == "new") {
         return do_new(client, args, out);

@@ -55,14 +55,21 @@ std::vector<CommandSpec> make_registry() {
                      {},
                      commands::status});
 
-    specs.push_back({"contacts",
-                     "list",
-                     "contacts_list",
-                     "List all address-book contacts as "
-                     "{user_id, chat_id, username, phone, first_name, last_name}; "
-                     "chat_id is the identifier every other command consumes",
-                     {},
-                     commands::contacts});
+    specs.push_back(
+        {"contacts",
+         "list",
+         "contacts_list",
+         "List address-book contacts as "
+         "{user_id, chat_id, username, phone, first_name, last_name}; "
+         "chat_id is the identifier every other command consumes. Paged: a full "
+         "page means there may be more — repeat with offset += limit",
+         {
+             {"limit", ParamSpec::Type::Integer, false,
+              "maximum number of contacts to return (default 100, max 1000)", "--limit"},
+             {"offset", ParamSpec::Type::Integer, false,
+              "number of contacts to skip (pagination; default 0)", "--offset"},
+         },
+         commands::contacts});
 
     specs.push_back({"contacts",
                      "new",
@@ -91,41 +98,57 @@ std::vector<CommandSpec> make_registry() {
                      "chats_list",
                      "List recent dialogs (private chats, groups, channels) as {chat_id, "
                      "title, type, username, unread_count, last_message}; set unread=true to "
-                     "get only chats with something new — the 'what needs attention' primitive",
+                     "get only chats with something new — the 'what needs attention' "
+                     "primitive. Paged by recency: for the next page repeat with "
+                     "offset += limit",
                      {
                          {"limit", ParamSpec::Type::Integer, false,
                           "maximum number of chats to return (default 50)", "--limit"},
+                         {"offset", ParamSpec::Type::Integer, false,
+                          "number of chats to skip, counted before the unread filter "
+                          "(pagination; default 0)",
+                          "--offset"},
                          {"unread", ParamSpec::Type::Boolean, false,
                           "only chats with unread messages (or marked unread)", "--unread"},
                      },
                      commands::chats});
 
-    specs.push_back({"chat",
-                     "",
-                     "chat_history",
-                     "Read the most recent messages of a chat, newest first, as {id, date, "
-                     "is_outgoing, sender_id, type, text, reply_to_message_id}; type tags the "
-                     "content (text/photo/voice_note/...), text is the text or media caption",
-                     {
-                         {"id", ParamSpec::Type::String, true, kIdDescription, ""},
-                         {"last", ParamSpec::Type::Integer, false,
-                          "number of messages to return (default 20, max 100)", "--last"},
-                     },
-                     commands::chat});
+    specs.push_back(
+        {"chat",
+         "",
+         "chat_history",
+         "Read the most recent messages of a chat, newest first, as {id, date, "
+         "is_outgoing, sender_id, type, text, reply_to_message_id}; type tags the "
+         "content (text/photo/voice_note/...), text is the text or media caption. "
+         "Service/system messages (joins, pins, ...) are omitted unless all=true. "
+         "For older messages repeat with before=<smallest id of the previous page>",
+         {
+             {"id", ParamSpec::Type::String, true, kIdDescription, ""},
+             {"last", ParamSpec::Type::Integer, false,
+              "number of messages to return (default 20, max 100)", "--last"},
+             {"before", ParamSpec::Type::Integer, false,
+              "only messages older than this message id (pagination cursor)", "--before"},
+             {"all", ParamSpec::Type::Boolean, false,
+              "include service/system messages (filtered out by default)", "--all"},
+         },
+         commands::chat});
 
     specs.push_back({"search",
                      "",
                      "search_messages",
                      "Search messages by text — inside one chat (chat_id given) or across all "
-                     "chats (chat_id omitted); returns {total_count, messages:[{id, chat_id, "
-                     "date, is_outgoing, sender_id, type, text, reply_to_message_id}]}, newest "
-                     "first",
+                     "chats (chat_id omitted); returns {total_count, next_offset, "
+                     "messages:[{id, chat_id, date, is_outgoing, sender_id, type, text, "
+                     "reply_to_message_id}]}, newest first. One page per call: pass the "
+                     "returned next_offset back as offset for the next page ('' = no more)",
                      {
                          {"query", ParamSpec::Type::String, true, "text to search for", ""},
                          {"chat_id", ParamSpec::Type::String, false,
                           "limit the search to this chat: chat_id or a public @username", "--chat"},
                          {"limit", ParamSpec::Type::Integer, false,
                           "maximum number of messages to return (default 20, max 100)", "--limit"},
+                         {"offset", ParamSpec::Type::String, false,
+                          "pagination cursor: the next_offset of the previous page", "--offset"},
                      },
                      commands::search});
 

@@ -137,6 +137,7 @@ $ tgcurl status      # after logout
 
 ```console
 # List saved contacts. chat_id is the field you feed back into chat/send.
+# Paged: --limit N (default 100, max 1000), --offset N skips the first N.
 $ tgcurl contacts list
 [{"user_id":42,"chat_id":42,"username":"alice","phone":"+15551234567","first_name":"Alice","last_name":"A"}]
 
@@ -153,15 +154,20 @@ $ tgcurl contacts block @spammer
 
 ```console
 # List recent dialogs (groups and channels too, not just contacts).
+# Next page: repeat with --offset <previous offset + limit>.
 $ tgcurl chats list --limit 20
 [{"chat_id":-100123,"title":"Dev Team","type":"supergroup","username":"devteam","unread_count":2,"last_message":{"id":1846,"date":1751600000,"is_outgoing":false,"sender_id":42,"type":"text","text":"hi","reply_to_message_id":0}}]
 
 # Only what needs attention (unread or marked-unread chats):
 $ tgcurl chats list --unread
 
-# Read the last N messages of a chat, newest first.
+# Read the last N messages of a chat, newest first. Service/system messages
+# (joins, pins, "X joined Telegram", ...) are filtered out; --all includes them.
 $ tgcurl chat 42 --last 3
 [{"id":1846,"date":1751600000,"is_outgoing":false,"sender_id":42,"type":"text","text":"hi","reply_to_message_id":0}]
+
+# Older messages: page backwards with --before <smallest id of the previous page>.
+$ tgcurl chat 42 --last 3 --before 1846
 
 # Send a message.
 $ tgcurl send @devteam "build is green"
@@ -179,11 +185,13 @@ $ tgcurl sendfile @devteam ./report.pdf "June report"
 $ tgcurl read -100123
 {"ok":true,"chat_id":-100123,"read_up_to":184600003072}
 
-# Search messages: inside one chat (--chat) or across all chats.
+# Search messages: inside one chat (--chat) or across all chats. One page per
+# call; next_offset is the cursor for the next page ("" = no more).
 $ tgcurl search "invoice" --chat 42 --limit 5
-{"total_count":2,"messages":[{"id":1846,"chat_id":42,"date":1751600000,"is_outgoing":false,"sender_id":42,"type":"document","text":"invoice for June","reply_to_message_id":0},...]}
+{"total_count":2,"next_offset":"","messages":[{"id":1846,"chat_id":42,"date":1751600000,"is_outgoing":false,"sender_id":42,"type":"document","text":"invoice for June","reply_to_message_id":0},...]}
 $ tgcurl search "deploy finished"
-{"total_count":14,"messages":[...]}
+{"total_count":14,"next_offset":"14221751600000","messages":[...]}
+$ tgcurl search "deploy finished" --offset "14221751600000"   # next page
 ```
 
 ### For AI agents

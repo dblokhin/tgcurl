@@ -87,6 +87,47 @@ inline std::string content_type_name(const td::td_api::MessageContent* content) 
     }
 }
 
+// True when the content is something a person (or bot) deliberately sent:
+// text, media, contact, poll, dice, a call record and so on. False for
+// service/system content — chat membership changes, pins, video-chat events,
+// "X joined Telegram", payment/giveaway notices, expired media and any type
+// this build doesn't know. A whitelist on purpose: TDLib grows a few new
+// service types every release, and an unknown type polluting an agent's
+// context is worse than a rare exotic user type being hidden (recoverable
+// with `chat --all`).
+inline bool is_user_message(const td::td_api::MessageContent* content) {
+    namespace td_api = td::td_api;
+    if (content == nullptr) {
+        return false;
+    }
+    switch (content->get_id()) {
+    case td_api::messageText::ID:
+    case td_api::messagePhoto::ID:
+    case td_api::messageVideo::ID:
+    case td_api::messageDocument::ID:
+    case td_api::messageAudio::ID:
+    case td_api::messageAnimation::ID:
+    case td_api::messageVoiceNote::ID:
+    case td_api::messageVideoNote::ID:
+    case td_api::messagePaidMedia::ID:
+    case td_api::messageSticker::ID:
+    case td_api::messageAnimatedEmoji::ID:
+    case td_api::messageDice::ID:
+    case td_api::messageGame::ID:
+    case td_api::messageLocation::ID:
+    case td_api::messageVenue::ID:
+    case td_api::messageContact::ID:
+    case td_api::messagePoll::ID:
+    case td_api::messageStory::ID:
+    case td_api::messageChecklist::ID:
+    case td_api::messageInvoice::ID:
+    case td_api::messageCall::ID:
+        return true;
+    default:
+        return false;
+    }
+}
+
 namespace detail {
 inline std::string formatted(const td::td_api::object_ptr<td::td_api::formattedText>& text) {
     return text != nullptr ? text->text_ : "";

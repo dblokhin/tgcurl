@@ -105,6 +105,27 @@ int main() {
         CHECK_EQ(content_type_name(content.get()), "other");
     }
 
+    // is_user_message: user-authored content passes, service/system content
+    // (and anything unknown) is filtered.
+    {
+        auto text = td_api::make_object<td_api::messageText>();
+        text->text_ = ftext("hi");
+        CHECK(is_user_message(text.get()));
+        CHECK(is_user_message(td_api::make_object<td_api::messagePhoto>().get()));
+        CHECK(is_user_message(td_api::make_object<td_api::messageDice>().get()));
+        CHECK(is_user_message(td_api::make_object<td_api::messageCall>().get()));
+        CHECK(is_user_message(td_api::make_object<td_api::messagePoll>().get()));
+
+        CHECK(!is_user_message(nullptr));
+        CHECK(!is_user_message(td_api::make_object<td_api::messagePinMessage>().get()));
+        CHECK(!is_user_message(td_api::make_object<td_api::messageChatAddMembers>().get()));
+        CHECK(!is_user_message(td_api::make_object<td_api::messageContactRegistered>().get()));
+        CHECK(!is_user_message(td_api::make_object<td_api::messageChatChangeTitle>().get()));
+        CHECK(!is_user_message(td_api::make_object<td_api::messageVideoChatStarted>().get()));
+        CHECK(!is_user_message(td_api::make_object<td_api::messageExpiredPhoto>().get()));
+        CHECK(!is_user_message(td_api::make_object<td_api::messageUnsupported>().get()));
+    }
+
     // Reply within the same chat is reported; cross-chat replies are not.
     {
         auto msg = base_message();

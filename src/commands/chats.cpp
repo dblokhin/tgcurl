@@ -1,11 +1,14 @@
-// chats list [--limit N] [--unread] — dump recent dialogs as JSON.
+// chats list [--limit N] [--offset N] [--unread] — dump recent dialogs as JSON.
 //
 // loadChats primes TDLib's in-memory chat list from the server, then getChats
 // returns the chat_ids and getChat fills each in. Output is a JSON array of
 //   {chat_id, title, type, username, unread_count, last_message}
 // covering private chats, groups, supergroups and channels — not just
 // contacts. --unread keeps only chats with unread messages (or marked
-// unread): the agent's "what needs attention" view.
+// unread): the agent's "what needs attention" view. --offset skips the first
+// N chats of the (recency-ordered) list — the pagination cursor: page with
+// --offset <previous offset + limit>. The offset indexes the raw list, before
+// the --unread filter, so it stays stable across pages.
 #include "error.h"
 #include "json_out.h"
 #include "message_render.h"
@@ -35,10 +38,25 @@ constexpr int kMaxLimit = 1000;
 
 struct ChatsArgs {
     int limit = kDefaultLimit;
+    int offset = 0;
     bool unread_only = false;
 };
 
-// Parse `chats list [--limit N] [--unread]`. Returns the options or an Error.
+// A non-negative integer option value, or nullopt when malformed.
+std::optional<int> parse_non_negative(const std::string& value) {
+    try {
+        std::size_t consumed = 0;
+        const int parsed = std::stoi(value, &consumed);
+        if (consumed != value.size() || parsed < 0) {
+            return std::nullopt;
+        }
+        return parsed;
+    } catch (const std::exception&) {
+        return std::nullopt;
+    }
+}
+
+// Parse `chats list [--limit N] [--offset N] [--unread]`.
 std::variant<ChatsArgs, Error> parse_chats_args(const Args& args) {
     // args[0] is "list"; anything after is options.
     ChatsArgs out;
@@ -47,17 +65,20 @@ std::variant<ChatsArgs, Error> parse_chats_args(const Args& args) {
             if (i + 1 >= args.size()) {
                 return Error("usage", "--limit needs a value");
             }
-            const std::string& value = args[i + 1];
-            try {
-                std::size_t consumed = 0;
-                out.limit = std::stoi(value, &consumed);
-                if (consumed != value.size() || out.limit <= 0) {
-                    return Error("usage", "--limit must be a positive integer");
-                }
-            } catch (const std::exception&) {
+            std::optional<int> limit = parse_non_negative(args[++i]);
+            if (!limit.has_value() || *limit == 0) {
                 return Error("usage", "--limit must be a positive integer");
             }
-            ++i; // consumed the value
+            out.limit = *limit;
+        } else if (args[i] == "--offset") {
+            if (i + 1 >= args.size()) {
+                return Error("usage", "--offset needs a value");
+            }
+            std::optional<int> offset = parse_non_negative(args[++i]);
+            if (!offset.has_value()) {
+                return Error("usage", "--offset must be a non-negative integer");
+            }
+            out.offset = *offset;
         } else if (args[i] == "--unread") {
             out.unread_only = true;
         } else {
@@ -65,6 +86,11 @@ std::variant<ChatsArgs, Error> parse_chats_args(const Args& args) {
         }
     }
     out.limit = std::min(out.limit, kMaxLimit);
+    // offset + limit is what actually gets loaded; keep the whole window
+    // inside the hard cap so paging can't grow the fetch without bound.
+    if (out.offset > kMaxLimit - out.limit) {
+        return Error("usage", "--offset + --limit must not exceed " + std::to_string(kMaxLimit));
+    }
     return out;
 }
 
@@ -147,14 +173,16 @@ namespace commands {
 
 std::optional<Error> chats(const Args& args, std::ostream& out) {
     if (args.empty() || args[0] != "list") {
-        return Error("usage", "chats list [--limit N] [--unread]");
+        return Error("usage", "chats list [--limit N] [--offset N] [--unread]");
     }
     std::variant<ChatsArgs, Error> parsed = parse_chats_args(args);
     if (std::holds_alternative<Error>(parsed)) {
         return std::get<Error>(parsed);
     }
     const ChatsArgs& ca = std::get<ChatsArgs>(parsed);
-    const int limit = ca.limit;
+    // getChats has no server-side offset, so load the whole window and skip
+    // the first `offset` ids locally; parse capped offset+limit at kMaxLimit.
+    const int window = ca.offset + ca.limit;
 
     std::variant<std::unique_ptr<TdClient>, Error> session = open_session();
     if (std::holds_alternative<Error>(session)) {
@@ -165,11 +193,11 @@ std::optional<Error> chats(const Args& args, std::ostream& out) {
     // Prime the in-memory chat list from the server. loadChats returns an error
     // with code 404 once there are no more chats to load — that's expected and
     // not a failure, so we ignore its result and just query what's loaded.
-    client.send_query(
-        td_api::make_object<td_api::loadChats>(td_api::make_object<td_api::chatListMain>(), limit));
+    client.send_query(td_api::make_object<td_api::loadChats>(
+        td_api::make_object<td_api::chatListMain>(), window));
 
     Object chats_obj = client.send_query(
-        td_api::make_object<td_api::getChats>(td_api::make_object<td_api::chatListMain>(), limit));
+        td_api::make_object<td_api::getChats>(td_api::make_object<td_api::chatListMain>(), window));
     if (is_error(chats_obj)) {
         return Error("request_failed", "getChats: " + error_text(chats_obj));
     }
@@ -178,7 +206,8 @@ std::optional<Error> chats(const Args& args, std::ostream& out) {
     const auto& chats = static_cast<const td_api::chats&>(*chats_obj);
 
     json::ArrayWriter arr;
-    for (std::int64_t chat_id : chats.chat_ids_) {
+    for (auto idx = static_cast<std::size_t>(ca.offset); idx < chats.chat_ids_.size(); ++idx) {
+        const std::int64_t chat_id = chats.chat_ids_[idx];
         Object chat_obj = client.send_query(td_api::make_object<td_api::getChat>(chat_id));
         if (is_error(chat_obj)) {
             return Error("request_failed", "getChat: " + error_text(chat_obj));
