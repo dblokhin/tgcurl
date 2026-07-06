@@ -13,9 +13,9 @@ $ tgcurl send 123456789 "deploy finished ✅"
 {"ok":true,"message_id":184600002560,"chat_id":123456789}
 ```
 
-> **Status:** all commands implemented (login/logout, contacts list/new/block, chats list,
-> chat, send). Pure logic is covered by `ctest`; the network round-trip is verified manually
-> against a real account (see *End-to-end verification* below). Design: [`DESIGN.md`](./DESIGN.md).
+> **Status:** all commands implemented — session (login/status/logout), contacts, chats with
+> unread info, history, search, send/reply, file upload, mark-read — available both as CLI
+> subcommands and as MCP tools. Design: [`DESIGN.md`](./DESIGN.md).
 
 ---
 
@@ -69,54 +69,37 @@ You also need **TDLib** available to the build. See *Building* below.
 
 ### Docker
 
-A multi-stage image that installs TDLib as a **prebuilt, version-pinned RPM** — no TDLib
-compilation during the image build, so it finishes in minutes. Debian would be the preferred
-base, but no Debian/Ubuntu repository ships a TDLib package; the only packaged channel is the
-Fedora copr `stevenlin/tdlib-master`, so the image is Fedora-based (pinned release tag). All
-versions are fixed: same inputs, same image.
+The image installs TDLib as a **prebuilt, version-pinned RPM** (Fedora copr — no Debian repo
+ships TDLib), so `docker build` takes minutes, not the hour a TDLib compile needs.
+
+All state (api_id/api_hash + the Telegram session) lives in the `tgcurl-data` **volume** —
+log in once, then run the container as many times as you like: the session survives restarts,
+`--rm`, and image rebuilds.
 
 ```console
-# Bump the TDLib pin deliberately with:  --build-arg TDLIB_PKG_VERSION=<NEVR>
+# Build the image:
 $ docker build -t tgcurl .
-```
 
-**All application state — `config.json` (api_id/api_hash) and the TDLib session database
-(`td.db/`) — lives in `/data` inside the container** (`TGCURL_CONFIG_DIR=/data`). Mount a
-host directory there and the state lives *outside* Docker: containers stay disposable
-(`--rm`), the image can be rebuilt, updated or restarted freely, and the login survives it
-all. Without the mount, the session dies with the container and every run would demand a
-fresh login.
+# 1. REQUIRED FIRST: authorize once, interactively (-it). Writes the session
+#    into the tgcurl-data volume; prompts for api_id/api_hash, phone, code.
+$ docker run -it --rm -v tgcurl-data:/data tgcurl login
 
-```console
-# One-time setup: a host directory for tgcurl's state. The container runs as
-# uid 1000, so that uid must own the directory. Perms 0700: it holds secrets.
-$ mkdir -p ~/tgcurl-data && chmod 700 ~/tgcurl-data && sudo chown 1000 ~/tgcurl-data
-
-# 1. Log in once, interactively (-it writes the session into the mount):
-$ docker run -it --rm -v ~/tgcurl-data:/data tgcurl login
-
-# 2. Run any command with the same mount; the default (no args) is `status`:
-$ docker run --rm -v ~/tgcurl-data:/data tgcurl
+# 2. From now on — any command, same volume, no more prompts ever:
+$ docker run --rm -v tgcurl-data:/data tgcurl status
 {"authorized":true,"user":{...}}
-$ docker run --rm -v ~/tgcurl-data:/data tgcurl contacts list
-$ docker run --rm -v ~/tgcurl-data:/data tgcurl chats list --limit 10
-$ docker run --rm -v ~/tgcurl-data:/data tgcurl send <chat_id> "hi from docker"
-
-# Restart/rebuild-proof: remove every container, rebuild the image — the state
-# is still in ~/tgcurl-data, so this still answers authorized:true, no login:
-$ docker run --rm -v ~/tgcurl-data:/data tgcurl status
+$ docker run --rm -v tgcurl-data:/data tgcurl send <chat_id> "hi from docker"
 ```
 
-MCP server mode over stdio — keep stdin open with `-i` (no TTY needed):
+**MCP for Claude** — after step 1, register the dockerized server (note `-i`: MCP speaks over
+stdin/stdout):
 
 ```console
-$ docker run -i --rm -v ~/tgcurl-data:/data tgcurl -mcp
-# e.g. registered in Claude Code:
-$ claude mcp add telegram -- docker run -i --rm -v ~/tgcurl-data:/data tgcurl -mcp
+$ claude mcp add telegram -- docker run -i --rm -v tgcurl-data:/data tgcurl -mcp
 ```
 
-A Docker **named volume** works too, if you prefer Docker to manage the location
-(`-v tgcurl-data:/data` everywhere instead of the host path — no chown needed).
+Claude Code will launch the container itself and get all tgcurl tools (send, search, history,
+files, …). To use a host directory instead of the named volume: `-v ~/tgcurl-data:/data`
+(create it with `chown 1000` + `chmod 700` first — the container runs unprivileged).
 
 ---
 
@@ -270,55 +253,11 @@ tgcurl 0.1.0: MCP server ready (stdio transport, JSON-RPC per line); waiting for
 ```
 
 Exposed tools: `contacts_list`, `contacts_new`, `contacts_block`, `chats_list`,
-`chat_history`, `send_message`. The session-lifecycle commands (`login`, `logout`, `status`)
-are CLI-only — the session is created and managed by a human, agents just use it. Each tool
-call is the same one-shot handler as the CLI subcommand; results and errors carry the same
-JSON. See DESIGN.md → *MCP mode*.
-
----
-
-## Testing & verification
-
-Pure logic is covered by an in-tree test suite (no external framework) run via `ctest`:
-
-```console
-make test
-```
-
-It exercises JSON output/escaping, config path resolution and `config.json`
-round-tripping (perms included), identifier classification (`classify`), the
-head-less prompter contract, and CLI-level dispatch (unknown/again/usage,
-head-less `login` not hanging, bad args and `unresolvable` failing before any
-network). Anything that hits Telegram's servers is **not** unit-tested — it's
-verified manually.
-
-### End-to-end verification (real account)
-
-The network path needs real credentials, so run this once by hand after a build:
-
-```console
-# 0. build links against TDLib
-make build
-
-# 1. get an api_id/api_hash at https://my.telegram.org/apps, then:
-tgcurl login                       # phone + code (+ 2FA) -> {"ok":true,...,"already":false}
-ls -l ~/.config/tgcurl             # config.json is 0600, td.db/ is 0700
-tgcurl login                       # -> "already":true, no prompts (session reuse)
-
-# 2. reads
-tgcurl contacts list | jq .        # array; every entry has a chat_id
-tgcurl chats list --limit 20 | jq. # array of {chat_id,title,type,username}
-
-# 3. write + read back
-tgcurl send "<chat_id>" "hello from tgcurl"   # -> {"ok":true,"message_id":...}
-tgcurl send "@some_public" "hi"               # @username path via searchPublicChat
-tgcurl chat "<chat_id>" --last 5 | jq .        # shows the sent message, newest-first
-
-# 4. negative paths
-tgcurl send "John Smith" "x"; echo $?          # {"error":"unresolvable",...}, exit 1
-TGCURL_CONFIG_DIR=$(mktemp -d) tgcurl contacts list </dev/null; echo $?
-                                               # no session -> error, exit 1, no stdin hang
-```
+`chat_history`, `search_messages`, `send_message`, `send_file`, `mark_read`. The
+session-lifecycle commands (`login`, `logout`, `status`) are CLI-only — the session is
+created and managed by a human, agents just use it. Each tool call is the same one-shot
+handler as the CLI subcommand; results and errors carry the same JSON. See DESIGN.md →
+*MCP mode*.
 
 ---
 
@@ -355,7 +294,6 @@ TGCURL_CONFIG_DIR=$(mktemp -d) tgcurl contacts list </dev/null; echo $?
 | `make deps`     | Install build + dev tooling (clang-tools, cppcheck, valgrind, ninja, ccache; auto-detects `dnf` / `apt`). Install TDLib separately (see above). |
 | `make build`    | Configure + compile into `build/tgcurl`. `BUILD_TYPE=Debug` for a debug build. |
 | `make static`   | Build a self-contained binary (bundled TDLib/OpenSSL/zlib/libstdc++), then print its `ldd`. |
-| `make test`     | Run the test suite via `ctest`.                                           |
 | `make install`  | Install to `PREFIX` (default `/usr/local`; needs sudo for system prefixes). |
 | `make release`  | Build the static binary and produce `.rpm` + `.deb` into `dist/`.         |
 | `make clean` / `make distclean` | Remove build artifacts / everything.                     |
