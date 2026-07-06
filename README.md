@@ -30,51 +30,14 @@ $ tgcurl send 123456789 "deploy finished ✅"
 - **Flexibility lives in the caller** — the tool exposes primitives (e.g. a contacts dump with
   stable `chat_id`s); the agent decides who to message.
 
-## Non-goals
-
-- No fuzzy display-name matching ("John Smith" → chat). List the contacts and let the caller
-  match.
-- No bot mode, no local message database beyond the session.
-- No hand-rolled MTProto — we use the official TDLib.
-
----
-
 ## Install
 
-### From a package (recommended)
+### Docker (recommended)
 
-Download the `.rpm` or `.deb` from the [releases page](https://github.com/dblokhin/tgcurl/releases),
-or build them yourself (see *Release* below), then:
-
-```console
-# Fedora / RHEL
-sudo dnf install ./tgcurl-0.1.0.x86_64.rpm
-
-# Debian / Ubuntu
-sudo apt install ./tgcurl_0.1.0_amd64.deb
-```
-
-The packaged binary is self-contained (TDLib, OpenSSL, zlib and the C++ runtime are statically
-linked); the only runtime dependency is the system glibc, which every supported distro ships.
-
-### Build from source
-
-```console
-make deps      # install build prerequisites (dnf or apt)
-make build     # compile into build/tgcurl
-sudo make install
-```
-
-You also need **TDLib** available to the build. See *Building* below.
-
-### Docker
-
-The image installs TDLib as a **prebuilt, version-pinned RPM** (Fedora copr — no Debian repo
-ships TDLib), so `docker build` takes minutes, not the hour a TDLib compile needs.
-
-All state (api_id/api_hash + the Telegram session) lives in the `tgcurl-data` **volume** —
-log in once, then run the container as many times as you like: the session survives restarts,
-`--rm`, and image rebuilds.
+No toolchain, no TDLib hunting: the image installs TDLib as a **prebuilt, version-pinned
+RPM**, so `docker build` takes minutes. All state (api_id/api_hash + the Telegram session)
+lives in the `tgcurl-data` **volume** — log in once, then run the container as many times as
+you like: the session survives restarts, `--rm`, and image rebuilds.
 
 ```console
 # Build the image:
@@ -100,6 +63,32 @@ $ claude mcp add telegram -- docker run -i --rm -v tgcurl-data:/data tgcurl -mcp
 Claude Code will launch the container itself and get all tgcurl tools (send, search, history,
 files, …). To use a host directory instead of the named volume: `-v ~/tgcurl-data:/data`
 (create it with `chown 1000` + `chmod 700` first — the container runs unprivileged).
+
+### From a package
+
+Download the `.rpm` or `.deb` from the [releases page](https://github.com/dblokhin/tgcurl/releases),
+or build them yourself (see *Release* below), then:
+
+```console
+# Fedora / RHEL
+sudo dnf install ./tgcurl-0.1.0.x86_64.rpm
+
+# Debian / Ubuntu
+sudo apt install ./tgcurl_0.1.0_amd64.deb
+```
+
+The packaged binary is self-contained (TDLib, OpenSSL, zlib and the C++ runtime are statically
+linked); the only runtime dependency is the system glibc, which every supported distro ships.
+
+### Build from source
+
+```console
+make deps      # install build prerequisites (dnf or apt)
+make build     # compile into build/tgcurl
+sudo make install
+```
+
+You also need **TDLib** available to the build. See *Building* below.
 
 ---
 
