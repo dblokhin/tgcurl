@@ -1,11 +1,14 @@
-// chats list [--limit N] — dump recent dialogs as JSON.
+// chats list [--limit N] [--unread] — dump recent dialogs as JSON.
 //
 // loadChats primes TDLib's in-memory chat list from the server, then getChats
 // returns the chat_ids and getChat fills each in. Output is a JSON array of
-//   {chat_id, title, type, username}
-// covering private chats, groups, supergroups and channels — not just contacts.
+//   {chat_id, title, type, username, unread_count, last_message}
+// covering private chats, groups, supergroups and channels — not just
+// contacts. --unread keeps only chats with unread messages (or marked
+// unread): the agent's "what needs attention" view.
 #include "error.h"
 #include "json_out.h"
+#include "message_render.h"
 #include "session.h"
 #include "tdclient.h"
 
@@ -30,10 +33,15 @@ namespace {
 constexpr int kDefaultLimit = 50;
 constexpr int kMaxLimit = 1000;
 
-// Parse `chats list [--limit N]`. Returns the limit, or an Error on bad args.
-std::variant<int, Error> parse_limit(const Args& args) {
-    // args[0] is "list"; anything after is options.
+struct ChatsArgs {
     int limit = kDefaultLimit;
+    bool unread_only = false;
+};
+
+// Parse `chats list [--limit N] [--unread]`. Returns the options or an Error.
+std::variant<ChatsArgs, Error> parse_chats_args(const Args& args) {
+    // args[0] is "list"; anything after is options.
+    ChatsArgs out;
     for (std::size_t i = 1; i < args.size(); ++i) {
         if (args[i] == "--limit") {
             if (i + 1 >= args.size()) {
@@ -42,19 +50,22 @@ std::variant<int, Error> parse_limit(const Args& args) {
             const std::string& value = args[i + 1];
             try {
                 std::size_t consumed = 0;
-                limit = std::stoi(value, &consumed);
-                if (consumed != value.size() || limit <= 0) {
+                out.limit = std::stoi(value, &consumed);
+                if (consumed != value.size() || out.limit <= 0) {
                     return Error("usage", "--limit must be a positive integer");
                 }
             } catch (const std::exception&) {
                 return Error("usage", "--limit must be a positive integer");
             }
             ++i; // consumed the value
+        } else if (args[i] == "--unread") {
+            out.unread_only = true;
         } else {
             return Error("usage", "unknown option: " + args[i]);
         }
     }
-    return std::min(limit, kMaxLimit);
+    out.limit = std::min(out.limit, kMaxLimit);
+    return out;
 }
 
 // Human-readable type tag for a chat's ChatType.
@@ -117,7 +128,17 @@ std::string chat_json(TdClient& client, const td_api::chat& chat) {
         w.field("type", "unknown");
         w.field("username", "");
     }
+    w.field("unread_count", chat.unread_count_);
+    // The newest message in the shared message shape; null when the chat is
+    // empty (or TDLib hasn't loaded it).
+    w.raw_field("last_message",
+                chat.last_message_ != nullptr ? message_json(*chat.last_message_) : "null");
     return w.object();
+}
+
+// A chat "needs attention": unread messages, or manually marked unread.
+bool is_unread(const td_api::chat& chat) {
+    return chat.unread_count_ > 0 || chat.is_marked_as_unread_;
 }
 
 } // namespace
@@ -126,13 +147,14 @@ namespace commands {
 
 std::optional<Error> chats(const Args& args, std::ostream& out) {
     if (args.empty() || args[0] != "list") {
-        return Error("usage", "chats list [--limit N]");
+        return Error("usage", "chats list [--limit N] [--unread]");
     }
-    std::variant<int, Error> lim = parse_limit(args);
-    if (std::holds_alternative<Error>(lim)) {
-        return std::get<Error>(lim);
+    std::variant<ChatsArgs, Error> parsed = parse_chats_args(args);
+    if (std::holds_alternative<Error>(parsed)) {
+        return std::get<Error>(parsed);
     }
-    const int limit = std::get<int>(lim);
+    const ChatsArgs& ca = std::get<ChatsArgs>(parsed);
+    const int limit = ca.limit;
 
     std::variant<std::unique_ptr<TdClient>, Error> session = open_session();
     if (std::holds_alternative<Error>(session)) {
@@ -163,7 +185,11 @@ std::optional<Error> chats(const Args& args, std::ostream& out) {
         }
         // Safe downcast: getChat returns `chat` on success.
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
-        arr.element(chat_json(client, static_cast<const td_api::chat&>(*chat_obj)));
+        const auto& chat = static_cast<const td_api::chat&>(*chat_obj);
+        if (ca.unread_only && !is_unread(chat)) {
+            continue;
+        }
+        arr.element(chat_json(client, chat));
     }
 
     json::emit(arr.array(), out);

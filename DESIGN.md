@@ -216,7 +216,7 @@ All output is JSON. Identifier args (`<id>`) follow the resolution rules above.
 | `tgcurl logout`                           | `logOut` + clear `td.db/`. `{"ok":true}`.                                                               |
 | `tgcurl status`                           | Session diagnostic, never prompts. `{"authorized":true,"user":{…}}` or `{"authorized":false,…}` — both exit 0: "not logged in" is the answer, not an error. |
 | `tgcurl contacts list`                    | `getContacts` → `[{user_id, chat_id, username, phone, first_name, last_name}]`. `chat_id` is the key field. |
-| `tgcurl chats list [--limit N]`           | `getChats` → `[{chat_id, title, type, username}]` for recent dialogs (groups/channels too).             |
+| `tgcurl chats list [--limit N] [--unread]` | `getChats` → `[{chat_id, title, type, username, unread_count, last_message}]` for recent dialogs (groups/channels too). `--unread` keeps only chats with unread messages — the agent's "what needs attention" view. |
 | `tgcurl contacts new <phone> <first> [last]` | `importContacts`.                                                                                    |
 | `tgcurl contacts block <id>`              | resolve → `setMessageSenderBlockList` (block).                                                          |
 | `tgcurl chat "<id>" --last N`             | resolve → `getChatHistory(limit=N)` → `[{id, date, is_outgoing, sender_id, type, text, reply_to_message_id}]`, newest-first. `type` tags the content (`text`, `photo`, `voice_note`, …); `text` is the text or media caption. |

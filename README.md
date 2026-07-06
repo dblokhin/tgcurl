@@ -182,7 +182,10 @@ $ tgcurl contacts block @spammer
 ```console
 # List recent dialogs (groups and channels too, not just contacts).
 $ tgcurl chats list --limit 20
-[{"chat_id":-100123,"title":"Dev Team","type":"supergroup","username":"devteam"}]
+[{"chat_id":-100123,"title":"Dev Team","type":"supergroup","username":"devteam","unread_count":2,"last_message":{"id":1846,"date":1751600000,"is_outgoing":false,"sender_id":42,"type":"text","text":"hi","reply_to_message_id":0}}]
+
+# Only what needs attention (unread or marked-unread chats):
+$ tgcurl chats list --unread
 
 # Read the last N messages of a chat, newest first.
 $ tgcurl chat 42 --last 3

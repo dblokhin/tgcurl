@@ -87,11 +87,14 @@ std::vector<CommandSpec> make_registry() {
     specs.push_back({"chats",
                      "list",
                      "chats_list",
-                     "List recent dialogs (private chats, groups, channels) as "
-                     "{chat_id, title, type, username}",
+                     "List recent dialogs (private chats, groups, channels) as {chat_id, "
+                     "title, type, username, unread_count, last_message}; set unread=true to "
+                     "get only chats with something new — the 'what needs attention' primitive",
                      {
                          {"limit", ParamSpec::Type::Integer, false,
                           "maximum number of chats to return (default 50)", "--limit"},
+                         {"unread", ParamSpec::Type::Boolean, false,
+                          "only chats with unread messages (or marked unread)", "--unread"},
                      },
                      commands::chats});
 
@@ -188,7 +191,8 @@ append_positionals(const CommandSpec& spec,
     return std::nullopt;
 }
 
-// Append the flag params as "--flag value" pairs.
+// Append the flag params: "--flag value" pairs, or the bare flag for a
+// Boolean set to true (false/absent adds nothing).
 std::optional<Error> append_flags(const CommandSpec& spec,
                                   const std::vector<std::pair<std::string, std::string>>& named,
                                   Args& args) {
@@ -200,6 +204,14 @@ std::optional<Error> append_flags(const CommandSpec& spec,
         if (value == nullptr) {
             if (p.required) {
                 return Error("invalid_params", "missing required argument: " + p.name);
+            }
+            continue;
+        }
+        if (p.type == ParamSpec::Type::Boolean) {
+            if (*value == "true") {
+                args.push_back(p.flag);
+            } else if (*value != "false") {
+                return Error("invalid_params", "argument " + p.name + " must be a boolean");
             }
             continue;
         }
@@ -243,7 +255,13 @@ std::string input_schema_json(const CommandSpec& spec) {
     json::ArrayWriter required;
     for (const ParamSpec& p : spec.params) {
         json::Writer prop;
-        prop.field("type", p.type == ParamSpec::Type::Integer ? "integer" : "string");
+        const char* type_name = "string";
+        if (p.type == ParamSpec::Type::Integer) {
+            type_name = "integer";
+        } else if (p.type == ParamSpec::Type::Boolean) {
+            type_name = "boolean";
+        }
+        prop.field("type", type_name);
         prop.field("description", p.description);
         properties.raw_field(p.name, prop.object());
         if (p.required) {

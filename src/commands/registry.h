@@ -33,14 +33,16 @@ using Handler = std::function<std::optional<Error>(const Args&, std::ostream&)>;
 
 // One MCP-visible parameter of a command and how it maps onto CLI arguments.
 struct ParamSpec {
-    enum class Type : std::uint8_t { String, Integer };
+    enum class Type : std::uint8_t { String, Integer, Boolean };
 
     std::string name; // MCP argument name, e.g. "chat_id"
     Type type = Type::String;
     bool required = true;
     std::string description; // shown to agents in the tool's inputSchema
     // How the value reaches the CLI arg vector: "" = positional (in ParamSpec
-    // declaration order); otherwise the flag it follows, e.g. "--limit".
+    // declaration order); otherwise the flag it follows, e.g. "--limit". A
+    // Boolean param must be an optional flag: true -> the bare flag is
+    // appended (no value), false/absent -> nothing.
     std::string flag;
 };
 

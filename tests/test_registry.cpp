@@ -131,6 +131,16 @@ int main() {
         CHECK_EQ(joined(r), "list");
         auto r2 = build_cli_args(*chats, {{"limit", "7"}});
         CHECK_EQ(joined(r2), "list --limit 7");
+        // Boolean flag: true -> bare flag, false -> nothing, junk -> error.
+        auto r3 = build_cli_args(*chats, {{"unread", "true"}, {"limit", "7"}});
+        CHECK_EQ(joined(r3), "list --limit 7 --unread");
+        auto r4 = build_cli_args(*chats, {{"unread", "false"}});
+        CHECK_EQ(joined(r4), "list");
+        auto r5 = build_cli_args(*chats, {{"unread", "yes"}});
+        CHECK(std::holds_alternative<Error>(r5));
+        // And the schema calls it a boolean.
+        CHECK(input_schema_json(*chats).find("\"unread\":{\"type\":\"boolean\"") !=
+              std::string::npos);
     }
     {
         // search: positional query + two optional flags.
