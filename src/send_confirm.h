@@ -19,10 +19,15 @@
 #ifndef TGCURL_SEND_CONFIRM_H
 #define TGCURL_SEND_CONFIRM_H
 
+#include "error.h"
+#include "tdclient.h"
+
+#include <chrono>
 #include <cstdint>
 #include <string>
 #include <td/telegram/td_api.h>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace tgcurl {
@@ -105,6 +110,57 @@ class SendConfirmation {
     // client's own sends produce these updates, so the buffer stays tiny.
     std::vector<Terminal> buffered_;
 };
+
+// The full send-with-acknowledgement pattern in one call: install the
+// observer, issue the sendMessage, then pump updates until the server's
+// terminal update arrives (or the deadline passes). Returns the message id
+// or an Error. Every command that sends a message goes through this.
+inline std::variant<std::int64_t, Error>
+send_with_ack(TdClient& client, td::td_api::object_ptr<td::td_api::sendMessage> request,
+              double timeout_seconds) {
+    namespace td_api = td::td_api;
+
+    // Install the confirmation observer before sending: it buffers a terminal
+    // update even if that update is dispatched while we're still waiting for
+    // the sendMessage response itself.
+    SendConfirmation confirm;
+    client.set_update_handler(
+        [&confirm](td_api::object_ptr<td_api::Object> update) { confirm.observe(update); });
+
+    Object result = client.send_query(std::move(request), timeout_seconds);
+    if (is_error(result)) {
+        return Error("request_failed", "sendMessage: " + error_text(result));
+    }
+    // Safe downcast: sendMessage returns `message` on success.
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+    const std::int64_t pending_id = static_cast<const td_api::message&>(*result).id_;
+    confirm.set_pending_id(pending_id);
+
+    // The message is only queued so far; wait for the server to accept it
+    // before reporting success (and before the process exits, dropping the
+    // pending send). Bounded so a stuck send can't hang forever.
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::duration<double>(timeout_seconds);
+    while (!confirm.done()) {
+        const double remaining =
+            std::chrono::duration<double>(deadline - std::chrono::steady_clock::now()).count();
+        if (remaining <= 0.0) {
+            break;
+        }
+        client.pump_updates(remaining);
+    }
+
+    switch (confirm.outcome()) {
+    case SendConfirmation::Outcome::Succeeded:
+        return pending_id;
+    case SendConfirmation::Outcome::Failed:
+        return Error("request_failed", "sendMessage: " + confirm.error());
+    case SendConfirmation::Outcome::Pending:
+    default:
+        return Error("request_failed",
+                     "sendMessage: timed out waiting for the server to accept the message");
+    }
+}
 
 } // namespace tgcurl
 

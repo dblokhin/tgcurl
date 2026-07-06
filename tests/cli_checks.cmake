@@ -22,6 +22,8 @@
 #   contacts_block_unresolvable - `contacts block "John Smith"` -> unresolvable.
 #   search_unresolvable - `search "q" --chat "John Smith"` -> unresolvable
 #                      before any network.
+#   sendfile_missing - `sendfile 42 /nonexistent` -> file_not_found before any
+#                      network (file validated offline).
 #   login_quiet      - `login` with a seeded (fake) config so TdClient is
 #                      constructed and the flow reaches the phone prompt; asserts
 #                      stderr carries NO TDLib logs (they are silenced by
@@ -34,7 +36,7 @@
 
 # Auth modes run against a throwaway, empty config directory so they never
 # touch a real session and start from a known "no config" state.
-if(MODE MATCHES "^(login_headless|logout_noconfig|status_noconfig|chats_bad_limit|contacts_bad_sub|send_unresolvable|chat_unresolvable|contacts_new_bad|contacts_block_unresolvable|search_unresolvable|login_quiet|mcp)$")
+if(MODE MATCHES "^(login_headless|logout_noconfig|status_noconfig|chats_bad_limit|contacts_bad_sub|send_unresolvable|chat_unresolvable|contacts_new_bad|contacts_block_unresolvable|search_unresolvable|sendfile_missing|login_quiet|mcp)$")
   set(SCRATCH "${CMAKE_CURRENT_BINARY_DIR}/cli_scratch_${MODE}")
   file(REMOVE_RECURSE "${SCRATCH}")
   set(ENV{TGCURL_CONFIG_DIR} "${SCRATCH}")
@@ -69,6 +71,8 @@ elseif(MODE STREQUAL "contacts_block_unresolvable")
   set(ARGS "contacts;block;John Smith")
 elseif(MODE STREQUAL "search_unresolvable")
   set(ARGS "search;hello;--chat;John Smith")
+elseif(MODE STREQUAL "sendfile_missing")
+  set(ARGS "sendfile;42;/definitely/not/a/file.bin")
 elseif(MODE STREQUAL "login_quiet")
   set(ARGS "login")
 elseif(MODE STREQUAL "mcp")
@@ -183,6 +187,13 @@ endif()
 if(MODE MATCHES "unresolvable")
   if(NOT err MATCHES "unresolvable")
     message(FATAL_ERROR "expected an 'unresolvable' error (mode=${MODE}); got: ${err}")
+  endif()
+endif()
+
+# sendfile validates the file offline, before any session.
+if(MODE STREQUAL "sendfile_missing")
+  if(NOT err MATCHES "file_not_found")
+    message(FATAL_ERROR "expected a 'file_not_found' error; got: ${err}")
   endif()
 endif()
 

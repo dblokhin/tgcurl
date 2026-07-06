@@ -73,8 +73,9 @@ int main() {
             CHECK(cli.count(std::string(cli_only) + " ") == 1);
             CHECK(by_tool(cli_only) == nullptr);
         }
-        for (const char* tool : {"contacts_list", "contacts_new", "contacts_block", "chats_list",
-                                 "chat_history", "send_message", "search_messages"}) {
+        for (const char* tool :
+             {"contacts_list", "contacts_new", "contacts_block", "chats_list", "chat_history",
+              "send_message", "search_messages", "send_file"}) {
             CHECK(by_tool(tool) != nullptr);
         }
     }
@@ -141,6 +142,15 @@ int main() {
         // And the schema calls it a boolean.
         CHECK(input_schema_json(*chats).find("\"unread\":{\"type\":\"boolean\"") !=
               std::string::npos);
+    }
+    {
+        // sendfile: trailing optional caption.
+        const CommandSpec* sendfile = by_tool("send_file");
+        auto r = build_cli_args(*sendfile, {{"id", "42"}, {"path", "/tmp/r.pdf"}});
+        CHECK_EQ(joined(r), "42 /tmp/r.pdf");
+        auto r2 = build_cli_args(*sendfile,
+                                 {{"caption", "report"}, {"id", "42"}, {"path", "/tmp/r.pdf"}});
+        CHECK_EQ(joined(r2), "42 /tmp/r.pdf report");
     }
     {
         // search: positional query + two optional flags.

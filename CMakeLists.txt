@@ -50,6 +50,7 @@ add_library(tgcurl_td
   src/commands/chats.cpp
   src/commands/chat.cpp
   src/commands/send.cpp
+  src/commands/sendfile.cpp
   src/commands/search.cpp
 )
 target_link_libraries(tgcurl_td PUBLIC tgcurl_core PRIVATE Td::TdStatic)

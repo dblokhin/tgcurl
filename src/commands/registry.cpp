@@ -15,6 +15,7 @@ std::optional<Error> contacts(const Args& args, std::ostream& out);
 std::optional<Error> chats(const Args& args, std::ostream& out);
 std::optional<Error> chat(const Args& args, std::ostream& out);
 std::optional<Error> send(const Args& args, std::ostream& out);
+std::optional<Error> sendfile(const Args& args, std::ostream& out);
 std::optional<Error> search(const Args& args, std::ostream& out);
 } // namespace commands
 
@@ -140,6 +141,22 @@ std::vector<CommandSpec> make_registry() {
               "message id (from chat_history/search_messages) to reply to", "--reply-to"},
          },
          commands::send});
+
+    specs.push_back(
+        {"sendfile",
+         "",
+         "send_file",
+         "Send a local file to a chat as a document, with an optional caption; "
+         "the path is read by the tgcurl process (must be reachable where the "
+         "MCP server runs); returns {ok, message_id, chat_id} only after the "
+         "upload completed and the server accepted the message",
+         {
+             {"id", ParamSpec::Type::String, true, kIdDescription, ""},
+             {"path", ParamSpec::Type::String, true,
+              "path to the file to send, local to the tgcurl process", ""},
+             {"caption", ParamSpec::Type::String, false, "caption shown with the document", ""},
+         },
+         commands::sendfile});
 
     return specs;
 }

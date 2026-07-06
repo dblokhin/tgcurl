@@ -149,6 +149,14 @@ add_test(NAME cli_search_unresolvable
     -DCMAKE_CURRENT_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
     -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_checks.cmake)
 
+# sendfile with a nonexistent path -> file_not_found, before any network.
+add_test(NAME cli_sendfile_missing
+  COMMAND ${CMAKE_COMMAND}
+    -DTGCURL=$<TARGET_FILE:tgcurl>
+    -DMODE=sendfile_missing
+    -DCMAKE_CURRENT_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_checks.cmake)
+
 # -mcp: JSON-RPC handshake, tools/list from the registry, a pre-network
 # failing tools/call as an isError result, clean exit on EOF.
 add_test(NAME cli_mcp

@@ -15,7 +15,6 @@
 #include "session.h"
 #include "tdclient.h"
 
-#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -125,50 +124,16 @@ std::optional<Error> send(const Args& args, std::ostream& out) {
         request->reply_to_ = std::move(reply);
     }
 
-    // Install the confirmation observer before sending: it buffers a terminal
-    // update even if that update is dispatched while we're still waiting for
-    // the sendMessage response itself (see send_confirm.h).
-    SendConfirmation confirm;
-    client.set_update_handler(
-        [&](td_api::object_ptr<td_api::Object> update) { confirm.observe(update); });
-
-    Object result = client.send_query(std::move(request));
-    if (is_error(result)) {
-        return Error("request_failed", "sendMessage: " + error_text(result));
-    }
-    // Safe downcast: sendMessage returns `message` on success.
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
-    const auto& message = static_cast<const td_api::message&>(*result);
-    const std::int64_t pending_id = message.id_;
-    confirm.set_pending_id(pending_id);
-
-    // The message is only queued so far; wait for the server to accept it before
-    // reporting success (and before the process exits, dropping the pending
-    // send). Bounded by kSendTimeoutSeconds so a stuck send can't hang forever.
-    const auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::duration<double>(kSendTimeoutSeconds);
-    while (!confirm.done()) {
-        const double remaining =
-            std::chrono::duration<double>(deadline - std::chrono::steady_clock::now()).count();
-        if (remaining <= 0.0) {
-            break;
-        }
-        client.pump_updates(remaining);
-    }
-
-    switch (confirm.outcome()) {
-    case SendConfirmation::Outcome::Succeeded:
-        break;
-    case SendConfirmation::Outcome::Failed:
-        return Error("request_failed", "sendMessage: " + confirm.error());
-    case SendConfirmation::Outcome::Pending:
-        return Error("request_failed",
-                     "sendMessage: timed out waiting for the server to accept the message");
+    // Send and wait for the server's acceptance (see send_confirm.h).
+    std::variant<std::int64_t, Error> sent =
+        send_with_ack(client, std::move(request), kSendTimeoutSeconds);
+    if (std::holds_alternative<Error>(sent)) {
+        return std::get<Error>(sent);
     }
 
     json::Writer w;
     w.field("ok", true);
-    w.field("message_id", pending_id);
+    w.field("message_id", std::get<std::int64_t>(sent));
     w.field("chat_id", chat_id);
     json::emit(w.object(), out);
     return std::nullopt;
