@@ -104,21 +104,36 @@ std::optional<Error> chat(const Args& args, std::ostream& out) {
         return Error("request_failed", "getChat: " + error_text(chat_obj));
     }
 
-    // History from the newest message: from_message_id=0, offset=0.
-    auto request = td_api::make_object<td_api::getChatHistory>(
-        chat_id, /*from_message_id=*/0, /*offset=*/0, ca.limit, /*only_local=*/false);
-    Object hist = client.send_query(std::move(request));
-    if (is_error(hist)) {
-        return Error("request_failed", "getChatHistory: " + error_text(hist));
-    }
-    // Safe downcast: getChatHistory returns `messages` on success.
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
-    const auto& messages = static_cast<const td_api::messages&>(*hist);
-
+    // History from the newest message (from_message_id=0), paging backwards.
+    // getChatHistory is documented to possibly return FEWER messages than
+    // `limit` even when more exist (only the locally cached slice arrives on
+    // a cold chat), so one call is not enough: keep requesting from the
+    // oldest message seen until we have `limit` messages or a request comes
+    // back empty. Bounded by a page cap so a pathological server can't spin
+    // us forever.
+    constexpr int kMaxPages = 32;
     json::ArrayWriter arr;
-    for (const auto& msg : messages.messages_) {
-        if (msg != nullptr) {
-            arr.element(message_json(*msg));
+    int collected = 0;
+    std::int64_t from_message_id = 0;
+    for (int page = 0; page < kMaxPages && collected < ca.limit; ++page) {
+        auto request = td_api::make_object<td_api::getChatHistory>(
+            chat_id, from_message_id, /*offset=*/0, ca.limit - collected, /*only_local=*/false);
+        Object hist = client.send_query(std::move(request));
+        if (is_error(hist)) {
+            return Error("request_failed", "getChatHistory: " + error_text(hist));
+        }
+        // Safe downcast: getChatHistory returns `messages` on success.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+        const auto& messages = static_cast<const td_api::messages&>(*hist);
+        if (messages.messages_.empty()) {
+            break; // reached the start of the chat
+        }
+        for (const auto& msg : messages.messages_) {
+            if (msg != nullptr && collected < ca.limit) {
+                arr.element(message_json(*msg));
+                ++collected;
+                from_message_id = msg->id_; // next page: older than this
+            }
         }
     }
     json::emit(arr.array(), out);
