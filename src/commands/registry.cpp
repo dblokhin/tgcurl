@@ -15,6 +15,7 @@ std::optional<Error> contacts(const Args& args, std::ostream& out);
 std::optional<Error> chats(const Args& args, std::ostream& out);
 std::optional<Error> chat(const Args& args, std::ostream& out);
 std::optional<Error> send(const Args& args, std::ostream& out);
+std::optional<Error> search(const Args& args, std::ostream& out);
 } // namespace commands
 
 namespace {
@@ -97,14 +98,31 @@ std::vector<CommandSpec> make_registry() {
     specs.push_back({"chat",
                      "",
                      "chat_history",
-                     "Read the most recent messages of a chat, newest first, as "
-                     "{id, date, is_outgoing, sender_id, text}",
+                     "Read the most recent messages of a chat, newest first, as {id, date, "
+                     "is_outgoing, sender_id, type, text, reply_to_message_id}; type tags the "
+                     "content (text/photo/voice_note/...), text is the text or media caption",
                      {
                          {"id", ParamSpec::Type::String, true, kIdDescription, ""},
                          {"last", ParamSpec::Type::Integer, false,
                           "number of messages to return (default 20, max 100)", "--last"},
                      },
                      commands::chat});
+
+    specs.push_back({"search",
+                     "",
+                     "search_messages",
+                     "Search messages by text — inside one chat (chat_id given) or across all "
+                     "chats (chat_id omitted); returns {total_count, messages:[{id, chat_id, "
+                     "date, is_outgoing, sender_id, type, text, reply_to_message_id}]}, newest "
+                     "first",
+                     {
+                         {"query", ParamSpec::Type::String, true, "text to search for", ""},
+                         {"chat_id", ParamSpec::Type::String, false,
+                          "limit the search to this chat: chat_id or a public @username", "--chat"},
+                         {"limit", ParamSpec::Type::Integer, false,
+                          "maximum number of messages to return (default 20, max 100)", "--limit"},
+                     },
+                     commands::search});
 
     specs.push_back({"send",
                      "",

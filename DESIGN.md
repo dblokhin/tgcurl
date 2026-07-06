@@ -219,8 +219,9 @@ All output is JSON. Identifier args (`<id>`) follow the resolution rules above.
 | `tgcurl chats list [--limit N]`           | `getChats` → `[{chat_id, title, type, username}]` for recent dialogs (groups/channels too).             |
 | `tgcurl contacts new <phone> <first> [last]` | `importContacts`.                                                                                    |
 | `tgcurl contacts block <id>`              | resolve → `setMessageSenderBlockList` (block).                                                          |
-| `tgcurl chat "<id>" --last N`             | resolve → `getChatHistory(limit=N)` → `[{id, date, is_outgoing, sender_id, text}]`, newest-first.       |
+| `tgcurl chat "<id>" --last N`             | resolve → `getChatHistory(limit=N)` → `[{id, date, is_outgoing, sender_id, type, text, reply_to_message_id}]`, newest-first. `type` tags the content (`text`, `photo`, `voice_note`, …); `text` is the text or media caption. |
 | `tgcurl send "<id>" "<text>"`             | resolve → `sendMessage` (`inputMessageText`), then wait for the server ack (see *Asynchrony discipline*). `{"ok":true,"message_id":…}`. |
+| `tgcurl search "<query>" [--chat <id>] [--limit N]` | `--chat` → `searchChatMessages`; otherwise `searchMessages` over the main chat list. `{"total_count":…,"messages":[…]}` in the shared message shape plus `chat_id`, newest-first. |
 | `tgcurl -mcp`                             | Long-running MCP stdio server exposing the same commands as tools (see *MCP mode*).                     |
 
 ### One registry, two front-ends
@@ -291,12 +292,14 @@ src/auth.h/.cpp             // authorization state-machine; interactive vs headl
 src/config.h/.cpp           // load/save config.json; resolve config dir (XDG + TGCURL_CONFIG_DIR)
 src/resolve.h/.cpp          // resolveId(arg) -> chat_id: numeric passthrough / @username / error
 src/send_confirm.h          // SendConfirmation: wait-for-server-ack rule for sendMessage
+src/message_render.h        // shared message->JSON shape (type/text/caption/reply)
 src/mcp.h/.cpp              // MCP stdio server: JSON-RPC loop over the registry
 src/commands/registry.h/.cpp// THE command table: CLI shape + MCP tool + handler, once per command
 src/commands/contacts.cpp   // list / new / block
 src/commands/chats.cpp      // chats list (getChats)
 src/commands/chat.cpp       // history -> JSON
 src/commands/send.cpp       // send message (+ ack wait)
+src/commands/search.cpp     // message search: per-chat / global
 src/json_out.h              // JSON writer: emit(...) / emit_error(...) + exit code
 src/json_in.h/.cpp          // strict minimal JSON parser (config.json, MCP requests)
 README.md                   // build steps, my.telegram.org registration, agent-usage examples

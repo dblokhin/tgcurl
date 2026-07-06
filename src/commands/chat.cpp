@@ -1,11 +1,12 @@
 // chat "<id>" --last N — read the most recent messages of a chat.
 //
 // Resolve the identifier, load the chat (getChat primes it), then
-// getChatHistory(limit=N) from the newest message. Output is a JSON array of
-//   {id, date, is_outgoing, sender_id, text}
-// newest-first (the order TDLib returns). Non-text messages get an empty text.
+// getChatHistory(limit=N) from the newest message. Output is a JSON array in
+// the shared message shape (see message_render.h), newest-first (the order
+// TDLib returns).
 #include "error.h"
 #include "json_out.h"
+#include "message_render.h"
 #include "resolve.h"
 #include "session.h"
 #include "tdclient.h"
@@ -65,43 +66,6 @@ std::variant<ChatArgs, Error> parse_chat_args(const Args& args) {
     }
     out.limit = std::min(out.limit, kMaxLast);
     return out;
-}
-
-// The numeric sender id (user_id or chat_id) behind a MessageSender, or 0.
-std::int64_t sender_id(const td_api::MessageSender* sender) {
-    if (sender == nullptr) {
-        return 0;
-    }
-    switch (sender->get_id()) {
-    case td_api::messageSenderUser::ID:
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
-        return static_cast<const td_api::messageSenderUser&>(*sender).user_id_;
-    case td_api::messageSenderChat::ID:
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
-        return static_cast<const td_api::messageSenderChat&>(*sender).chat_id_;
-    default:
-        return 0;
-    }
-}
-
-// The text of a message if it's a plain text message; otherwise empty.
-std::string message_text(const td_api::MessageContent* content) {
-    if (content == nullptr || content->get_id() != td_api::messageText::ID) {
-        return "";
-    }
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
-    const auto& text = static_cast<const td_api::messageText&>(*content);
-    return text.text_ != nullptr ? text.text_->text_ : "";
-}
-
-std::string message_json(const td_api::message& msg) {
-    json::Writer w;
-    w.field("id", static_cast<std::int64_t>(msg.id_));
-    w.field("date", msg.date_);
-    w.field("is_outgoing", msg.is_outgoing_);
-    w.field("sender_id", sender_id(msg.sender_id_.get()));
-    w.field("text", message_text(msg.content_.get()));
-    return w.object();
 }
 
 } // namespace

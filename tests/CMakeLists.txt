@@ -40,6 +40,11 @@ add_executable(test_registry test_registry.cpp)
 target_link_libraries(test_registry PRIVATE tgcurl_td)
 add_test(NAME registry COMMAND test_registry)
 
+# The shared message renderer (td_api objects, no network).
+add_executable(test_message_render test_message_render.cpp)
+target_link_libraries(test_message_render PRIVATE tgcurl_td)
+add_test(NAME message_render COMMAND test_message_render)
+
 # --- CLI-level dispatch checks (exercise the real binary) -------------------
 # Unknown subcommand -> non-zero exit and a JSON error on stderr.
 add_test(NAME cli_unknown_command
@@ -133,6 +138,14 @@ add_test(NAME cli_contacts_block_unresolvable
   COMMAND ${CMAKE_COMMAND}
     -DTGCURL=$<TARGET_FILE:tgcurl>
     -DMODE=contacts_block_unresolvable
+    -DCMAKE_CURRENT_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_checks.cmake)
+
+# search with a free-text --chat -> unresolvable, before any network.
+add_test(NAME cli_search_unresolvable
+  COMMAND ${CMAKE_COMMAND}
+    -DTGCURL=$<TARGET_FILE:tgcurl>
+    -DMODE=search_unresolvable
     -DCMAKE_CURRENT_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
     -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_checks.cmake)
 

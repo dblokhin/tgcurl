@@ -74,7 +74,7 @@ int main() {
             CHECK(by_tool(cli_only) == nullptr);
         }
         for (const char* tool : {"contacts_list", "contacts_new", "contacts_block", "chats_list",
-                                 "chat_history", "send_message"}) {
+                                 "chat_history", "send_message", "search_messages"}) {
             CHECK(by_tool(tool) != nullptr);
         }
     }
@@ -127,6 +127,14 @@ int main() {
         CHECK_EQ(joined(r), "list");
         auto r2 = build_cli_args(*chats, {{"limit", "7"}});
         CHECK_EQ(joined(r2), "list --limit 7");
+    }
+    {
+        // search: positional query + two optional flags.
+        const CommandSpec* search = by_tool("search_messages");
+        auto r = build_cli_args(*search, {{"query", "deploy"}});
+        CHECK_EQ(joined(r), "deploy");
+        auto r2 = build_cli_args(*search, {{"limit", "5"}, {"query", "deploy"}, {"chat_id", "@dev"}});
+        CHECK_EQ(joined(r2), "deploy --chat @dev --limit 5");
     }
 
     // --- Mapping errors ------------------------------------------------------
