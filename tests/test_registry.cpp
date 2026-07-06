@@ -102,6 +102,10 @@ int main() {
         const CommandSpec* send = by_tool("send_message");
         auto r = build_cli_args(*send, {{"text", "hi"}, {"id", "@user"}});
         CHECK_EQ(joined(r), "@user hi");
+        // Optional reply flag.
+        auto r2 = build_cli_args(*send,
+                                 {{"id", "@user"}, {"text", "hi"}, {"reply_to_message_id", "99"}});
+        CHECK_EQ(joined(r2), "@user hi --reply-to 99");
     }
     {
         // Subcommand word precedes positionals; trailing optional may be

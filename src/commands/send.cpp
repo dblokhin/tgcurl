@@ -36,16 +36,56 @@ namespace {
 // How long to wait for the server to accept a queued message before giving up.
 constexpr double kSendTimeoutSeconds = 30.0;
 
+constexpr const char* kUsage = R"(send "<chat_id|@username>" "<text>" [--reply-to <message_id>])";
+
+struct SendArgs {
+    std::string id_arg;
+    std::string text;
+    std::int64_t reply_to = 0; // 0 = not a reply
+};
+
+std::variant<SendArgs, Error> parse_send_args(const Args& args) {
+    if (args.size() < 2) {
+        return Error("usage", kUsage);
+    }
+    SendArgs out;
+    out.id_arg = args[0];
+    out.text = args[1];
+    for (std::size_t i = 2; i < args.size(); ++i) {
+        if (args[i] == "--reply-to") {
+            if (i + 1 >= args.size()) {
+                return Error("usage", "--reply-to needs a value");
+            }
+            const std::string& value = args[i + 1];
+            try {
+                std::size_t consumed = 0;
+                out.reply_to = std::stoll(value, &consumed);
+                if (consumed != value.size() || out.reply_to <= 0) {
+                    return Error("usage", "--reply-to must be a positive message id");
+                }
+            } catch (const std::exception&) {
+                return Error("usage", "--reply-to must be a positive message id");
+            }
+            ++i;
+        } else {
+            return Error("usage", "unknown option: " + args[i]);
+        }
+    }
+    return out;
+}
+
 } // namespace
 
 namespace commands {
 
 std::optional<Error> send(const Args& args, std::ostream& out) {
-    if (args.size() != 2) {
-        return Error("usage", R"(send "<chat_id|@username>" "<text>")");
+    std::variant<SendArgs, Error> parsed = parse_send_args(args);
+    if (std::holds_alternative<Error>(parsed)) {
+        return std::get<Error>(parsed);
     }
-    const std::string& id_arg = args[0];
-    const std::string& text = args[1];
+    const SendArgs& sa = std::get<SendArgs>(parsed);
+    const std::string& id_arg = sa.id_arg;
+    const std::string& text = sa.text;
 
     // Reject an unresolvable identifier up front — no session needed to know a
     // free-text name can't be addressed.
@@ -78,6 +118,12 @@ std::optional<Error> send(const Args& args, std::ostream& out) {
     auto request = td_api::make_object<td_api::sendMessage>();
     request->chat_id_ = chat_id;
     request->input_message_content_ = std::move(content);
+    if (sa.reply_to != 0) {
+        // Reply to a message in the same chat (id from chat_history/search).
+        auto reply = td_api::make_object<td_api::inputMessageReplyToMessage>();
+        reply->message_id_ = sa.reply_to;
+        request->reply_to_ = std::move(reply);
+    }
 
     // Install the confirmation observer before sending: it buffers a terminal
     // update even if that update is dispatched while we're still waiting for

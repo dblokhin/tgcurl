@@ -124,16 +124,19 @@ std::vector<CommandSpec> make_registry() {
                      },
                      commands::search});
 
-    specs.push_back({"send",
-                     "",
-                     "send_message",
-                     "Send a text message to a chat; returns {ok, message_id, chat_id} only "
-                     "after the server has accepted the message",
-                     {
-                         {"id", ParamSpec::Type::String, true, kIdDescription, ""},
-                         {"text", ParamSpec::Type::String, true, "message text to send", ""},
-                     },
-                     commands::send});
+    specs.push_back(
+        {"send",
+         "",
+         "send_message",
+         "Send a text message to a chat, optionally as a reply; returns {ok, "
+         "message_id, chat_id} only after the server has accepted the message",
+         {
+             {"id", ParamSpec::Type::String, true, kIdDescription, ""},
+             {"text", ParamSpec::Type::String, true, "message text to send", ""},
+             {"reply_to_message_id", ParamSpec::Type::Integer, false,
+              "message id (from chat_history/search_messages) to reply to", "--reply-to"},
+         },
+         commands::send});
 
     return specs;
 }

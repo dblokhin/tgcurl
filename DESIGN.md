@@ -220,7 +220,7 @@ All output is JSON. Identifier args (`<id>`) follow the resolution rules above.
 | `tgcurl contacts new <phone> <first> [last]` | `importContacts`.                                                                                    |
 | `tgcurl contacts block <id>`              | resolve → `setMessageSenderBlockList` (block).                                                          |
 | `tgcurl chat "<id>" --last N`             | resolve → `getChatHistory(limit=N)` → `[{id, date, is_outgoing, sender_id, type, text, reply_to_message_id}]`, newest-first. `type` tags the content (`text`, `photo`, `voice_note`, …); `text` is the text or media caption. |
-| `tgcurl send "<id>" "<text>"`             | resolve → `sendMessage` (`inputMessageText`), then wait for the server ack (see *Asynchrony discipline*). `{"ok":true,"message_id":…}`. |
+| `tgcurl send "<id>" "<text>" [--reply-to <msg_id>]` | resolve → `sendMessage` (`inputMessageText`, optional `inputMessageReplyToMessage`), then wait for the server ack (see *Asynchrony discipline*). `{"ok":true,"message_id":…}`. |
 | `tgcurl search "<query>" [--chat <id>] [--limit N]` | `--chat` → `searchChatMessages`; otherwise `searchMessages` over the main chat list. `{"total_count":…,"messages":[…]}` in the shared message shape plus `chat_id`, newest-first. |
 | `tgcurl -mcp`                             | Long-running MCP stdio server exposing the same commands as tools (see *MCP mode*).                     |
 
