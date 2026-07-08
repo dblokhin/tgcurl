@@ -95,6 +95,10 @@ How this is kept from regressing:
 - On timeout the command reports `request_failed` *without* claiming the action didn't happen —
   the server may still accept it later; the error text says so ("timed out waiting for the
   server to accept").
+- **Scheduled sends are class 2 too** (verified live): a `sendMessage` with
+  `messageSendOptions.scheduling_state` set is acknowledged by the server with the same
+  `updateMessageSendSucceeded` once the message is accepted into the chat's scheduled queue —
+  the shared wait covers it unchanged; no special casing.
 
 Related but distinct: the graceful `close` in `TdClient`'s destructor (pump until
 `authorizationStateClosed`) is what flushes TDLib's databases on exit; skipping it silently
@@ -208,23 +212,21 @@ Neither is recreated if valid. `config.json` is read on every run to feed `setTd
 
 ## CLI surface
 
-All output is JSON. Identifier args (`<id>`) follow the resolution rules above.
+All output is JSON; identifier args (`<id>`) follow the resolution rules above. The command
+list itself lives in **README → Commands** (user documentation) and, authoritatively, in
+`src/commands/registry.cpp` — not here: this document covers the rules commands obey, not
+their individual shapes. Cross-cutting conventions:
 
-| Command                                   | Behaviour                                                                                               |
-|-------------------------------------------|--------------------------------------------------------------------------------------------------------|
-| `tgcurl login`                            | Idempotent. Prompts for api_id/api_hash if config absent, then phone/code/2FA on a TTY. `{"ok":true,"user":{…}}`. |
-| `tgcurl logout`                           | `logOut` + clear `td.db/`. `{"ok":true}`.                                                               |
-| `tgcurl status`                           | Session diagnostic, never prompts. `{"authorized":true,"user":{…}}` or `{"authorized":false,…}` — both exit 0: "not logged in" is the answer, not an error. |
-| `tgcurl contacts list [--limit N] [--offset N]` | `getContacts` → `[{user_id, chat_id, username, phone, first_name, last_name}]`. `chat_id` is the key field. One page per call (default 100, max 1000); `--offset` skips the first N — the whole address book never lands in one response. |
-| `tgcurl chats list [--limit N] [--offset N] [--unread]` | `getChats` → `[{chat_id, title, type, username, unread_count, last_message}]` for recent dialogs (groups/channels too). `--unread` keeps only chats with unread messages — the agent's "what needs attention" view. Paged by recency: `--offset` skips the first N of the raw list (counted before the unread filter, so pages stay stable); `offset + limit` is capped at 1000. |
-| `tgcurl contacts new <phone> <first> [last]` | `importContacts`.                                                                                    |
-| `tgcurl contacts block <id>`              | resolve → `setMessageSenderBlockList` (block).                                                          |
-| `tgcurl chat "<id>" [--last N] [--before <msg_id>] [--all]` | resolve → `getChatHistory(limit=N)` → `[{id, date, is_outgoing, sender_id, type, text, reply_to_message_id}]`, newest-first. `type` tags the content (`text`, `photo`, `voice_note`, …); `text` is the text or media caption. Service/system messages (joins, pins, "X joined Telegram", …) are filtered out unless `--all`; only user-authored content reaches the agent. `--before` pages backwards: only messages older than the given id (pass the smallest id of the previous page). |
-| `tgcurl send "<id>" "<text>" [--reply-to <msg_id>]` | resolve → `sendMessage` (`inputMessageText`, optional `inputMessageReplyToMessage`), then wait for the server ack (see *Asynchrony discipline*). `{"ok":true,"message_id":…}`. |
-| `tgcurl search "<query>" [--chat <id>] [--limit N] [--offset <cursor>]` | `--chat` → `searchChatMessages`; otherwise `searchMessages` over the main chat list. `{"total_count":…,"next_offset":"…","messages":[…]}` in the shared message shape plus `chat_id`, newest-first. One page per call (default 20, max 100); `next_offset` is the cursor for the next page (`""` = no more) — pass it back via `--offset`. In-chat it is a message id, globally an opaque server string; callers just echo it. |
-| `tgcurl sendfile "<id>" "<path>" ["<caption>"]` | resolve → `sendMessage` (`inputMessageDocument` over `inputFileLocal`); the ack wait covers the whole upload (minutes-scale budget). `{"ok":true,"message_id":…}`. |
-| `tgcurl read "<id>"`                      | resolve → newest message → `viewMessages(force_read)`: clears the chat's unread counter. `{"ok":true,"read_up_to":…}`. |
-| `tgcurl -mcp`                             | Long-running MCP stdio server exposing the same commands as tools (see *MCP mode*).                     |
+- **The send family** (`send`, `sendfile`, `sendphoto`, `sendgif`, `sendlocation`, `sendpoll`,
+  `sendchecklist`) shares one tail — `--reply-to <msg_id>`, `--silent`
+  (`messageSendOptions.disable_notification`) and `--at <unix_time>` (scheduled send via
+  `messageSchedulingStateSendAtDate`) — implemented once in `src/commands/send_common.*`
+  (flag parsing, resolve, send options, the server-ack wait, the `{ok, message_id, chat_id}`
+  result). Media commands share their argument shape (`<id> <path> ["<caption>"]`, offline
+  file validation) via `src/commands/media_args.h`.
+- List-valued inputs (poll options, checklist tasks) ride as one `'|'`-separated argument:
+  the registry maps MCP arguments 1:1 onto CLI tokens and has no array parameters.
+- `tgcurl -mcp` serves the same registry as a long-running MCP stdio server (see *MCP mode*).
 
 ### One registry, two front-ends
 
@@ -253,10 +255,11 @@ The same binary doubles as an **MCP (Model Context Protocol) server** so agent r
 - **Surface:** implements `initialize`, `ping`, `tools/list`, `tools/call`. No resources/
   prompts/notifications — tgcurl's capabilities are all verbs. Parsing uses the same in-house
   `json_in.h` the config loader uses.
-- **Tools = registry entries.** Each `CommandSpec` with a non-empty tool name becomes a tool
-  (`contacts_list`, `contacts_new`, `contacts_block`, `chats_list`, `chat_history`,
-  `send_message`); `tools/call` maps the named JSON arguments onto the CLI argv shape and
-  runs the *identical* handler, capturing its JSON output as the tool result text.
+- **Tools = registry entries.** Each `CommandSpec` with a non-empty tool name becomes a tool —
+  the set is exactly "every command except the CLI-only session lifecycle" (the current list
+  is pinned by `tests/test_registry.cpp` and shown in README → *MCP server mode*).
+  `tools/call` maps the named JSON arguments onto the CLI argv shape and runs the *identical*
+  handler, capturing its JSON output as the tool result text.
 
 ### CLI-only commands
 
@@ -291,17 +294,20 @@ CMakeLists.txt              // links Td::TdStatic (find_package(Td) or add_subdi
 src/main.cpp                // dispatch derived from the registry; -mcp entry; JSON error wrapper
 src/tdclient.h/.cpp         // ClientManager wrapper: create, send/receive, sync send_query()
 src/auth.h/.cpp             // authorization state-machine; interactive vs headless modes
+src/session.h/.cpp          // open_session(): config + client + headless auth, one call
 src/config.h/.cpp           // load/save config.json; resolve config dir (XDG + TGCURL_CONFIG_DIR)
 src/resolve.h/.cpp          // resolveId(arg) -> chat_id: numeric passthrough / @username / error
 src/send_confirm.h          // SendConfirmation: wait-for-server-ack rule for sendMessage
 src/message_render.h        // shared message->JSON shape (type/text/caption/reply)
 src/mcp.h/.cpp              // MCP stdio server: JSON-RPC loop over the registry
 src/commands/registry.h/.cpp// THE command table: CLI shape + MCP tool + handler, once per command
+src/commands/send_common.h/.cpp // shared send tail: flags, options, ack wait, result
+src/commands/media_args.h   // shared media arg shape: path validation, caption, flags
 src/commands/contacts.cpp   // list / new / block
 src/commands/chats.cpp      // chats list (getChats)
 src/commands/chat.cpp       // history -> JSON
-src/commands/send.cpp       // send message (+ ack wait)
-src/commands/sendfile.cpp   // send a local file as a document (+ upload ack)
+src/commands/send*.cpp      // the send family, one file per content type: text (send.cpp),
+                            //   document, photo, animation, location, poll, checklist
 src/commands/search.cpp     // message search: per-chat / global
 src/commands/read.cpp       // mark a chat as read (viewMessages force_read)
 src/json_out.h              // JSON writer: emit(...) / emit_error(...) + exit code

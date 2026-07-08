@@ -22,6 +22,17 @@ const CommandSpec* by_tool(const std::string& tool) {
     return nullptr;
 }
 
+std::string joined_set(const std::set<std::string>& items) {
+    std::string out;
+    for (const std::string& item : items) {
+        if (!out.empty()) {
+            out += " ";
+        }
+        out += item;
+    }
+    return out;
+}
+
 std::string joined(const std::variant<Args, Error>& r) {
     if (!std::holds_alternative<Args>(r)) {
         return "<error: " + std::get<Error>(r).hint() + ">";
@@ -67,17 +78,25 @@ int main() {
                 }
             }
         }
-        // The full surface is registered: the session-lifecycle commands are
-        // CLI-only, everything else is also an MCP tool.
-        for (const char* cli_only : {"login", "logout", "status"}) {
-            CHECK(cli.count(std::string(cli_only) + " ") == 1);
-            CHECK(by_tool(cli_only) == nullptr);
+        // The full surface, as an EXACT set: this fails when a tool is added
+        // or removed, forcing the list (and the docs it mirrors) to be
+        // updated — a presence-only spot check would stay green forever.
+        const std::set<std::string> want_tools = {
+            "contacts_list", "contacts_new",  "contacts_block", "chats_list",
+            "chat_history",  "search_messages", "send_message", "send_file",
+            "send_photo",    "send_gif",      "send_location",  "send_poll",
+            "send_checklist", "mark_read"};
+        CHECK_EQ(joined_set(tools), joined_set(want_tools));
+        // The session-lifecycle commands are CLI-only (empty tool name) — and
+        // nothing else is: a new command is agent-facing by default.
+        std::set<std::string> cli_only;
+        for (const CommandSpec& spec : registry()) {
+            if (spec.tool.empty()) {
+                CHECK(spec.subcommand.empty());
+                cli_only.insert(spec.command);
+            }
         }
-        for (const char* tool :
-             {"contacts_list", "contacts_new", "contacts_block", "chats_list", "chat_history",
-              "send_message", "search_messages", "send_file", "mark_read"}) {
-            CHECK(by_tool(tool) != nullptr);
-        }
+        CHECK_EQ(joined_set(cli_only), joined_set({"login", "logout", "status"}));
     }
 
     // --- inputSchema generation -------------------------------------------

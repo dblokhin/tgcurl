@@ -17,8 +17,9 @@ $ tgcurl send 123456789 "deploy finished ✅"
 ```
 
 > **Status:** all commands implemented — session (login/status/logout), contacts, chats with
-> unread info, history, search, send/reply, file upload, mark-read — available both as CLI
-> subcommands and as MCP tools. Design: [`DESIGN.md`](./DESIGN.md).
+> unread info, history, search, mark-read, and the send family: text (with replies), files,
+> photos, GIFs, locations, polls, checklists — each also silent (`--silent`) or scheduled
+> (`--at`) — available both as CLI subcommands and as MCP tools. Design: [`DESIGN.md`](./DESIGN.md).
 
 ---
 
@@ -74,10 +75,10 @@ or build them yourself (see *Release* below), then:
 
 ```console
 # Fedora / RHEL
-sudo dnf install ./tgcurl-0.1.0.x86_64.rpm
+sudo dnf install ./tgcurl-0.2.0.x86_64.rpm
 
 # Debian / Ubuntu
-sudo apt install ./tgcurl_0.1.0_amd64.deb
+sudo apt install ./tgcurl_0.2.0_amd64.deb
 ```
 
 The packaged binary is self-contained (TDLib, OpenSSL, zlib and the C++ runtime are statically
@@ -197,9 +198,11 @@ $ tgcurl sendlocation @devteam 52.3676 4.9041
 $ tgcurl sendpoll @devteam "Lunch?" "pizza|sushi|skip"
 $ tgcurl sendchecklist @devteam "Release 0.3" "tag|build|publish"
 
-# Every send* command also takes --silent (no notification sound) and
-# --at <unix_time> (scheduled send; lands in the chat's scheduled queue):
+# Every send* command also takes --reply-to <message_id>, --silent (no
+# notification sound) and --at <unix_time> (scheduled send; lands in the
+# chat's scheduled queue):
 $ tgcurl send @devteam "deploy at noon" --silent --at 1783000000
+$ tgcurl sendphoto @devteam ./graph.png --reply-to 184600002560
 
 # Mark a chat as read (so `chats list --unread` stops reporting it):
 $ tgcurl read -100123
@@ -266,7 +269,7 @@ to stderr (stdout is reserved for the protocol) and waits for JSON-RPC on stdin:
 
 ```console
 $ tgcurl -mcp
-tgcurl 0.1.0: MCP server ready (stdio transport, JSON-RPC per line); waiting for an MCP client on stdin. Ctrl+C or EOF stops it.
+tgcurl 0.2.0: MCP server ready (stdio transport, JSON-RPC per line); waiting for an MCP client on stdin. Ctrl+C or EOF stops it.
 ```
 
 Exposed tools: `contacts_list`, `contacts_new`, `contacts_block`, `chats_list`,

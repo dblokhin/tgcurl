@@ -40,6 +40,11 @@ add_executable(test_registry test_registry.cpp)
 target_link_libraries(test_registry PRIVATE tgcurl_td)
 add_test(NAME registry COMMAND test_registry)
 
+# The shared send-argument parsing (flags, '|' lists, media arg shape).
+add_executable(test_send_args test_send_args.cpp)
+target_link_libraries(test_send_args PRIVATE tgcurl_td)
+add_test(NAME send_args COMMAND test_send_args)
+
 # The shared message renderer (td_api objects, no network).
 add_executable(test_message_render test_message_render.cpp)
 target_link_libraries(test_message_render PRIVATE tgcurl_td)

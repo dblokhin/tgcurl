@@ -114,8 +114,12 @@ elseif(MODE STREQUAL "login_quiet")
   set(ARGS "login")
 elseif(MODE STREQUAL "mcp")
   set(ARGS "-mcp")
-else() # usage: no args
+elseif(MODE STREQUAL "usage") # no args
   set(ARGS "")
+else()
+  # A typo'd MODE in an add_test() would otherwise fall through to the usage
+  # scenario and pass its generic assertions — a silently wrong test.
+  message(FATAL_ERROR "cli_checks.cmake: unknown MODE '${MODE}'")
 endif()
 
 # Feed an empty stdin (via a written-empty file) so `login` sees immediate EOF
@@ -169,8 +173,10 @@ if(MODE STREQUAL "mcp")
   if(NOT out MATCHES "\"serverInfo\":{\"name\":\"tgcurl\"")
     message(FATAL_ERROR "mcp: initialize response missing serverInfo; got: ${out}")
   endif()
-  # tools/list exposes the registry (spot-check two tools and a schema).
-  if(NOT out MATCHES "\"name\":\"send_message\"" OR NOT out MATCHES "\"name\":\"contacts_list\"")
+  # tools/list exposes the registry (spot-check an original tool, a recent
+  # one, and a schema; the EXACT tool set is pinned in test_registry.cpp).
+  if(NOT out MATCHES "\"name\":\"send_message\"" OR NOT out MATCHES "\"name\":\"contacts_list\""
+     OR NOT out MATCHES "\"name\":\"send_poll\"")
     message(FATAL_ERROR "mcp: tools/list missing expected tools; got: ${out}")
   endif()
   if(NOT out MATCHES "\"inputSchema\":{\"type\":\"object\"")
