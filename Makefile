@@ -17,7 +17,7 @@
 # Configuration
 # ----------------------------------------------------------------------------
 NAME        := tgcurl
-VERSION     ?= 0.1.0
+VERSION     ?= 0.2.0
 BUILD_TYPE  ?= Release
 BUILD_DIR   ?= build
 DIST_DIR    ?= dist
