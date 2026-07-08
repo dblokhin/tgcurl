@@ -167,6 +167,39 @@ int main() {
         CHECK_EQ(joined(r2), "42 /tmp/p.jpg sunset");
     }
     {
+        // Shared send modifiers on every send_* tool: --silent (bare flag),
+        // --at, --reply-to.
+        const CommandSpec* send = by_tool("send_message");
+        auto r = build_cli_args(
+            *send, {{"id", "42"}, {"text", "hi"}, {"silent", "true"}, {"schedule_at", "1780000000"}});
+        CHECK_EQ(joined(r), "42 hi --silent --at 1780000000");
+        const CommandSpec* sendgif = by_tool("send_gif");
+        auto r2 = build_cli_args(*sendgif,
+                                 {{"id", "42"}, {"path", "/tmp/a.gif"}, {"silent", "true"}});
+        CHECK_EQ(joined(r2), "42 /tmp/a.gif --silent");
+    }
+    {
+        // sendlocation: number params map onto positionals verbatim, and the
+        // schema calls them numbers.
+        const CommandSpec* loc = by_tool("send_location");
+        auto r = build_cli_args(*loc,
+                                {{"id", "42"}, {"latitude", "52.37"}, {"longitude", "4.89"}});
+        CHECK_EQ(joined(r), "42 52.37 4.89");
+        CHECK(input_schema_json(*loc).find("\"latitude\":{\"type\":\"number\"") !=
+              std::string::npos);
+    }
+    {
+        // sendpoll / sendchecklist: the '|'-list rides as one positional.
+        const CommandSpec* poll = by_tool("send_poll");
+        auto r = build_cli_args(*poll,
+                                {{"id", "42"}, {"question", "lunch?"}, {"options", "yes|no"}});
+        CHECK_EQ(joined(r), "42 lunch? yes|no");
+        const CommandSpec* checklist = by_tool("send_checklist");
+        auto r2 = build_cli_args(
+            *checklist, {{"id", "42"}, {"title", "groceries"}, {"tasks", "milk|bread"}});
+        CHECK_EQ(joined(r2), "42 groceries milk|bread");
+    }
+    {
         // search: positional query + optional flags, incl. the pagination cursor.
         const CommandSpec* search = by_tool("search_messages");
         auto r = build_cli_args(*search, {{"query", "deploy"}});

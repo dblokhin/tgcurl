@@ -26,6 +26,16 @@
 #                      network (file validated offline).
 #   sendphoto_missing - `sendphoto 42 /nonexistent` -> file_not_found before
 #                      any network (file validated offline).
+#   sendgif_missing  - `sendgif 42 /nonexistent` -> file_not_found before any
+#                      network (file validated offline).
+#   sendlocation_bad - `sendlocation 42 91 0` -> usage error before any
+#                      network (latitude out of range).
+#   sendpoll_bad     - `sendpoll 42 q only-one-option` -> usage error before
+#                      any network (a poll needs >= 2 options).
+#   sendchecklist_bad - `sendchecklist 42 title "|"` -> usage error before any
+#                      network (no tasks after splitting).
+#   send_at_bad      - `send 42 hi --at abc` -> usage error before any network
+#                      (--at must be a unix time).
 #   read_unresolvable - `read "John Smith"` -> unresolvable before any network.
 #   login_quiet      - `login` with a seeded (fake) config so TdClient is
 #                      constructed and the flow reaches the phone prompt; asserts
@@ -39,7 +49,7 @@
 
 # Auth modes run against a throwaway, empty config directory so they never
 # touch a real session and start from a known "no config" state.
-if(MODE MATCHES "^(login_headless|logout_noconfig|status_noconfig|chats_bad_limit|contacts_bad_sub|send_unresolvable|chat_unresolvable|contacts_new_bad|contacts_block_unresolvable|search_unresolvable|sendfile_missing|sendphoto_missing|read_unresolvable|login_quiet|mcp)$")
+if(MODE MATCHES "^(login_headless|logout_noconfig|status_noconfig|chats_bad_limit|contacts_bad_sub|send_unresolvable|chat_unresolvable|contacts_new_bad|contacts_block_unresolvable|search_unresolvable|sendfile_missing|sendphoto_missing|sendgif_missing|sendlocation_bad|sendpoll_bad|sendchecklist_bad|send_at_bad|read_unresolvable|login_quiet|mcp)$")
   set(SCRATCH "${CMAKE_CURRENT_BINARY_DIR}/cli_scratch_${MODE}")
   file(REMOVE_RECURSE "${SCRATCH}")
   set(ENV{TGCURL_CONFIG_DIR} "${SCRATCH}")
@@ -78,6 +88,16 @@ elseif(MODE STREQUAL "sendfile_missing")
   set(ARGS "sendfile;42;/definitely/not/a/file.bin")
 elseif(MODE STREQUAL "sendphoto_missing")
   set(ARGS "sendphoto;42;/definitely/not/a/photo.jpg")
+elseif(MODE STREQUAL "sendgif_missing")
+  set(ARGS "sendgif;42;/definitely/not/a/anim.gif")
+elseif(MODE STREQUAL "sendlocation_bad")
+  set(ARGS "sendlocation;42;91;0")
+elseif(MODE STREQUAL "sendpoll_bad")
+  set(ARGS "sendpoll;42;lunch?;only-one-option")
+elseif(MODE STREQUAL "sendchecklist_bad")
+  set(ARGS "sendchecklist;42;groceries;|")
+elseif(MODE STREQUAL "send_at_bad")
+  set(ARGS "send;42;hi;--at;abc")
 elseif(MODE STREQUAL "read_unresolvable")
   set(ARGS "read;John Smith")
 elseif(MODE STREQUAL "login_quiet")
@@ -197,8 +217,15 @@ if(MODE MATCHES "unresolvable")
   endif()
 endif()
 
-# sendfile/sendphoto validate the file offline, before any session.
-if(MODE MATCHES "^(sendfile|sendphoto)_missing$")
+# The offline arg validators fail with "usage" before any session.
+if(MODE MATCHES "^(sendlocation_bad|sendpoll_bad|sendchecklist_bad|send_at_bad)$")
+  if(NOT err MATCHES "\"usage\"")
+    message(FATAL_ERROR "expected a 'usage' error (mode=${MODE}); got: ${err}")
+  endif()
+endif()
+
+# The media senders validate the file offline, before any session.
+if(MODE MATCHES "^(sendfile|sendphoto|sendgif)_missing$")
   if(NOT err MATCHES "file_not_found")
     message(FATAL_ERROR "expected a 'file_not_found' error; got: ${err}")
   endif()

@@ -165,6 +165,18 @@ add_test(NAME cli_sendphoto_missing
     -DCMAKE_CURRENT_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
     -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_checks.cmake)
 
+# The remaining offline validators: missing media files and bad send args
+# all fail before any network.
+foreach(offline_mode sendgif_missing sendlocation_bad sendpoll_bad
+        sendchecklist_bad send_at_bad)
+  add_test(NAME cli_${offline_mode}
+    COMMAND ${CMAKE_COMMAND}
+      -DTGCURL=$<TARGET_FILE:tgcurl>
+      -DMODE=${offline_mode}
+      -DCMAKE_CURRENT_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_checks.cmake)
+endforeach()
+
 # read with a free-text name -> unresolvable, before any network.
 add_test(NAME cli_read_unresolvable
   COMMAND ${CMAKE_COMMAND}

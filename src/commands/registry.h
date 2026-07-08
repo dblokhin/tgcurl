@@ -33,7 +33,7 @@ using Handler = std::function<std::optional<Error>(const Args&, std::ostream&)>;
 
 // One MCP-visible parameter of a command and how it maps onto CLI arguments.
 struct ParamSpec {
-    enum class Type : std::uint8_t { String, Integer, Boolean };
+    enum class Type : std::uint8_t { String, Integer, Number, Boolean };
 
     std::string name; // MCP argument name, e.g. "chat_id"
     Type type = Type::String;

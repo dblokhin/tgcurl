@@ -17,6 +17,10 @@ std::optional<Error> chat(const Args& args, std::ostream& out);
 std::optional<Error> send(const Args& args, std::ostream& out);
 std::optional<Error> sendfile(const Args& args, std::ostream& out);
 std::optional<Error> sendphoto(const Args& args, std::ostream& out);
+std::optional<Error> sendgif(const Args& args, std::ostream& out);
+std::optional<Error> sendlocation(const Args& args, std::ostream& out);
+std::optional<Error> sendpoll(const Args& args, std::ostream& out);
+std::optional<Error> sendchecklist(const Args& args, std::ostream& out);
 std::optional<Error> search(const Args& args, std::ostream& out);
 std::optional<Error> read(const Args& args, std::ostream& out);
 } // namespace commands
@@ -25,6 +29,19 @@ namespace {
 
 constexpr const char* kIdDescription =
     "chat_id (from contacts_list / chats_list) or a public @username";
+
+// The send modifiers shared by every send_* tool (see send_common.h).
+std::vector<ParamSpec> with_send_flags(std::vector<ParamSpec> params) {
+    params.push_back({"reply_to_message_id", ParamSpec::Type::Integer, false,
+                      "message id (from chat_history/search_messages) to reply to", "--reply-to"});
+    params.push_back({"silent", ParamSpec::Type::Boolean, false,
+                      "deliver without sound/vibration on the recipient's side", "--silent"});
+    params.push_back({"schedule_at", ParamSpec::Type::Integer, false,
+                      "unix time (UTC seconds, in the future) to schedule the send; the message "
+                      "waits in the chat's scheduled queue until then",
+                      "--at"});
+    return params;
+}
 
 std::vector<CommandSpec> make_registry() {
     std::vector<CommandSpec> specs;
@@ -153,53 +170,96 @@ std::vector<CommandSpec> make_registry() {
                      },
                      commands::search});
 
-    specs.push_back(
-        {"send",
-         "",
-         "send_message",
-         "Send a text message to a chat, optionally as a reply; returns {ok, "
-         "message_id, chat_id} only after the server has accepted the message",
-         {
-             {"id", ParamSpec::Type::String, true, kIdDescription, ""},
-             {"text", ParamSpec::Type::String, true, "message text to send", ""},
-             {"reply_to_message_id", ParamSpec::Type::Integer, false,
-              "message id (from chat_history/search_messages) to reply to", "--reply-to"},
-         },
-         commands::send});
+    specs.push_back({"send", "", "send_message",
+                     "Send a text message to a chat, optionally as a reply, silently, or "
+                     "scheduled; returns {ok, message_id, chat_id} only after the server "
+                     "has accepted the message",
+                     with_send_flags({
+                         {"id", ParamSpec::Type::String, true, kIdDescription, ""},
+                         {"text", ParamSpec::Type::String, true, "message text to send", ""},
+                     }),
+                     commands::send});
 
     specs.push_back(
-        {"sendfile",
-         "",
-         "send_file",
+        {"sendfile", "", "send_file",
          "Send a local file to a chat as a document, with an optional caption; "
          "the path is read by the tgcurl process (must be reachable where the "
          "MCP server runs); returns {ok, message_id, chat_id} only after the "
          "upload completed and the server accepted the message",
-         {
+         with_send_flags({
              {"id", ParamSpec::Type::String, true, kIdDescription, ""},
              {"path", ParamSpec::Type::String, true,
               "path to the file to send, local to the tgcurl process", ""},
              {"caption", ParamSpec::Type::String, false, "caption shown with the document", ""},
-         },
+         }),
          commands::sendfile});
 
     specs.push_back(
-        {"sendphoto",
-         "",
-         "send_photo",
+        {"sendphoto", "", "send_photo",
          "Send a local image to a chat as a photo (rendered inline by clients, "
          "unlike send_file's document attachment; Telegram re-compresses it — "
          "use send_file to keep the original bytes), with an optional caption; "
          "the path is read by the tgcurl process (must be reachable where the "
          "MCP server runs); returns {ok, message_id, chat_id} only after the "
          "upload completed and the server accepted the message",
-         {
+         with_send_flags({
              {"id", ParamSpec::Type::String, true, kIdDescription, ""},
              {"path", ParamSpec::Type::String, true,
               "path to the image to send, local to the tgcurl process", ""},
              {"caption", ParamSpec::Type::String, false, "caption shown with the photo", ""},
-         },
+         }),
          commands::sendphoto});
+
+    specs.push_back(
+        {"sendgif", "", "send_gif",
+         "Send a GIF (or soundless MP4) as an animation — rendered inline and "
+         "auto-played in a loop by clients; optional caption; the path is read "
+         "by the tgcurl process; returns {ok, message_id, chat_id} only after "
+         "the upload completed and the server accepted the message",
+         with_send_flags({
+             {"id", ParamSpec::Type::String, true, kIdDescription, ""},
+             {"path", ParamSpec::Type::String, true,
+              "path to the GIF/MP4 to send, local to the tgcurl process", ""},
+             {"caption", ParamSpec::Type::String, false, "caption shown with the animation", ""},
+         }),
+         commands::sendgif});
+
+    specs.push_back(
+        {"sendlocation", "", "send_location",
+         "Send a geographic point (static location pin, not a live location); "
+         "returns {ok, message_id, chat_id} after the server accepted it",
+         with_send_flags({
+             {"id", ParamSpec::Type::String, true, kIdDescription, ""},
+             {"latitude", ParamSpec::Type::Number, true, "latitude in degrees, [-90, 90]", ""},
+             {"longitude", ParamSpec::Type::Number, true, "longitude in degrees, [-180, 180]", ""},
+         }),
+         commands::sendlocation});
+
+    specs.push_back({"sendpoll", "", "send_poll",
+                     "Send a regular anonymous single-answer poll (groups/channels only — "
+                     "Telegram rejects polls in private chats); returns {ok, message_id, "
+                     "chat_id} after the server accepted it",
+                     with_send_flags({
+                         {"id", ParamSpec::Type::String, true, kIdDescription, ""},
+                         {"question", ParamSpec::Type::String, true, "the poll question", ""},
+                         {"options", ParamSpec::Type::String, true,
+                          "answer options, '|'-separated, at least 2: \"yes|no|maybe\"", ""},
+                     }),
+                     commands::sendpoll});
+
+    specs.push_back({"sendchecklist", "", "send_checklist",
+                     "Send a checklist (titled to-do list whose tasks participants can "
+                     "tick off; recipients can mark tasks done but not add tasks). Sending "
+                     "requires Telegram Premium — without it the server rejects it and the "
+                     "error is returned. Returns {ok, message_id, chat_id} after the "
+                     "server accepted it",
+                     with_send_flags({
+                         {"id", ParamSpec::Type::String, true, kIdDescription, ""},
+                         {"title", ParamSpec::Type::String, true, "the checklist title", ""},
+                         {"tasks", ParamSpec::Type::String, true,
+                          "tasks, '|'-separated, at least 1: \"buy milk|call mom\"", ""},
+                     }),
+                     commands::sendchecklist});
 
     specs.push_back({"read",
                      "",
@@ -328,6 +388,8 @@ std::string input_schema_json(const CommandSpec& spec) {
         const char* type_name = "string";
         if (p.type == ParamSpec::Type::Integer) {
             type_name = "integer";
+        } else if (p.type == ParamSpec::Type::Number) {
+            type_name = "number";
         } else if (p.type == ParamSpec::Type::Boolean) {
             type_name = "boolean";
         }

@@ -189,6 +189,18 @@ $ tgcurl sendfile @devteam ./report.pdf "June report"
 $ tgcurl sendphoto @devteam ./screenshot.png "the bug"
 {"ok":true,"message_id":184600003328,"chat_id":-100123}
 
+# Send a GIF (or soundless MP4) — auto-played inline:
+$ tgcurl sendgif @devteam ./demo.gif "before/after"
+
+# Send a location pin, a poll, a checklist (checklists need Telegram Premium):
+$ tgcurl sendlocation @devteam 52.3676 4.9041
+$ tgcurl sendpoll @devteam "Lunch?" "pizza|sushi|skip"
+$ tgcurl sendchecklist @devteam "Release 0.3" "tag|build|publish"
+
+# Every send* command also takes --silent (no notification sound) and
+# --at <unix_time> (scheduled send; lands in the chat's scheduled queue):
+$ tgcurl send @devteam "deploy at noon" --silent --at 1783000000
+
 # Mark a chat as read (so `chats list --unread` stops reporting it):
 $ tgcurl read -100123
 {"ok":true,"chat_id":-100123,"read_up_to":184600003072}
@@ -258,7 +270,8 @@ tgcurl 0.1.0: MCP server ready (stdio transport, JSON-RPC per line); waiting for
 ```
 
 Exposed tools: `contacts_list`, `contacts_new`, `contacts_block`, `chats_list`,
-`chat_history`, `search_messages`, `send_message`, `send_file`, `send_photo`, `mark_read`. The
+`chat_history`, `search_messages`, `send_message`, `send_file`, `send_photo`, `send_gif`,
+`send_location`, `send_poll`, `send_checklist`, `mark_read`. The
 session-lifecycle commands (`login`, `logout`, `status`) are CLI-only — the session is
 created and managed by a human, agents just use it. Each tool call is the same one-shot
 handler as the CLI subcommand; results and errors carry the same JSON. See DESIGN.md →
