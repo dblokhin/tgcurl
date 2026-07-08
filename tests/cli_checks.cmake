@@ -24,6 +24,8 @@
 #                      before any network.
 #   sendfile_missing - `sendfile 42 /nonexistent` -> file_not_found before any
 #                      network (file validated offline).
+#   sendphoto_missing - `sendphoto 42 /nonexistent` -> file_not_found before
+#                      any network (file validated offline).
 #   read_unresolvable - `read "John Smith"` -> unresolvable before any network.
 #   login_quiet      - `login` with a seeded (fake) config so TdClient is
 #                      constructed and the flow reaches the phone prompt; asserts
@@ -37,7 +39,7 @@
 
 # Auth modes run against a throwaway, empty config directory so they never
 # touch a real session and start from a known "no config" state.
-if(MODE MATCHES "^(login_headless|logout_noconfig|status_noconfig|chats_bad_limit|contacts_bad_sub|send_unresolvable|chat_unresolvable|contacts_new_bad|contacts_block_unresolvable|search_unresolvable|sendfile_missing|read_unresolvable|login_quiet|mcp)$")
+if(MODE MATCHES "^(login_headless|logout_noconfig|status_noconfig|chats_bad_limit|contacts_bad_sub|send_unresolvable|chat_unresolvable|contacts_new_bad|contacts_block_unresolvable|search_unresolvable|sendfile_missing|sendphoto_missing|read_unresolvable|login_quiet|mcp)$")
   set(SCRATCH "${CMAKE_CURRENT_BINARY_DIR}/cli_scratch_${MODE}")
   file(REMOVE_RECURSE "${SCRATCH}")
   set(ENV{TGCURL_CONFIG_DIR} "${SCRATCH}")
@@ -74,6 +76,8 @@ elseif(MODE STREQUAL "search_unresolvable")
   set(ARGS "search;hello;--chat;John Smith")
 elseif(MODE STREQUAL "sendfile_missing")
   set(ARGS "sendfile;42;/definitely/not/a/file.bin")
+elseif(MODE STREQUAL "sendphoto_missing")
+  set(ARGS "sendphoto;42;/definitely/not/a/photo.jpg")
 elseif(MODE STREQUAL "read_unresolvable")
   set(ARGS "read;John Smith")
 elseif(MODE STREQUAL "login_quiet")
@@ -193,8 +197,8 @@ if(MODE MATCHES "unresolvable")
   endif()
 endif()
 
-# sendfile validates the file offline, before any session.
-if(MODE STREQUAL "sendfile_missing")
+# sendfile/sendphoto validate the file offline, before any session.
+if(MODE MATCHES "^(sendfile|sendphoto)_missing$")
   if(NOT err MATCHES "file_not_found")
     message(FATAL_ERROR "expected a 'file_not_found' error; got: ${err}")
   endif()

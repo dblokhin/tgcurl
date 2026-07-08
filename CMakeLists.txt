@@ -51,6 +51,7 @@ add_library(tgcurl_td
   src/commands/chat.cpp
   src/commands/send.cpp
   src/commands/sendfile.cpp
+  src/commands/sendphoto.cpp
   src/commands/search.cpp
   src/commands/read.cpp
 )

@@ -16,6 +16,7 @@ std::optional<Error> chats(const Args& args, std::ostream& out);
 std::optional<Error> chat(const Args& args, std::ostream& out);
 std::optional<Error> send(const Args& args, std::ostream& out);
 std::optional<Error> sendfile(const Args& args, std::ostream& out);
+std::optional<Error> sendphoto(const Args& args, std::ostream& out);
 std::optional<Error> search(const Args& args, std::ostream& out);
 std::optional<Error> read(const Args& args, std::ostream& out);
 } // namespace commands
@@ -181,6 +182,24 @@ std::vector<CommandSpec> make_registry() {
              {"caption", ParamSpec::Type::String, false, "caption shown with the document", ""},
          },
          commands::sendfile});
+
+    specs.push_back(
+        {"sendphoto",
+         "",
+         "send_photo",
+         "Send a local image to a chat as a photo (rendered inline by clients, "
+         "unlike send_file's document attachment; Telegram re-compresses it — "
+         "use send_file to keep the original bytes), with an optional caption; "
+         "the path is read by the tgcurl process (must be reachable where the "
+         "MCP server runs); returns {ok, message_id, chat_id} only after the "
+         "upload completed and the server accepted the message",
+         {
+             {"id", ParamSpec::Type::String, true, kIdDescription, ""},
+             {"path", ParamSpec::Type::String, true,
+              "path to the image to send, local to the tgcurl process", ""},
+             {"caption", ParamSpec::Type::String, false, "caption shown with the photo", ""},
+         },
+         commands::sendphoto});
 
     specs.push_back({"read",
                      "",

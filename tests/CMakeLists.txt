@@ -157,6 +157,14 @@ add_test(NAME cli_sendfile_missing
     -DCMAKE_CURRENT_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
     -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_checks.cmake)
 
+# sendphoto with a nonexistent path -> file_not_found, before any network.
+add_test(NAME cli_sendphoto_missing
+  COMMAND ${CMAKE_COMMAND}
+    -DTGCURL=$<TARGET_FILE:tgcurl>
+    -DMODE=sendphoto_missing
+    -DCMAKE_CURRENT_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_checks.cmake)
+
 # read with a free-text name -> unresolvable, before any network.
 add_test(NAME cli_read_unresolvable
   COMMAND ${CMAKE_COMMAND}

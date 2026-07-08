@@ -181,6 +181,11 @@ $ tgcurl send @devteam "on it" --reply-to 184600002560
 $ tgcurl sendfile @devteam ./report.pdf "June report"
 {"ok":true,"message_id":184600003072,"chat_id":-100123}
 
+# Send an image as a photo — rendered inline in the chat, not as an attached
+# document (Telegram re-compresses it; use sendfile to keep the original bytes):
+$ tgcurl sendphoto @devteam ./screenshot.png "the bug"
+{"ok":true,"message_id":184600003328,"chat_id":-100123}
+
 # Mark a chat as read (so `chats list --unread` stops reporting it):
 $ tgcurl read -100123
 {"ok":true,"chat_id":-100123,"read_up_to":184600003072}
@@ -250,7 +255,7 @@ tgcurl 0.1.0: MCP server ready (stdio transport, JSON-RPC per line); waiting for
 ```
 
 Exposed tools: `contacts_list`, `contacts_new`, `contacts_block`, `chats_list`,
-`chat_history`, `search_messages`, `send_message`, `send_file`, `mark_read`. The
+`chat_history`, `search_messages`, `send_message`, `send_file`, `send_photo`, `mark_read`. The
 session-lifecycle commands (`login`, `logout`, `status`) are CLI-only — the session is
 created and managed by a human, agents just use it. Each tool call is the same one-shot
 handler as the CLI subcommand; results and errors carry the same JSON. See DESIGN.md →

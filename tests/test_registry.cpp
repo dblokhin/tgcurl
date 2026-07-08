@@ -158,6 +158,15 @@ int main() {
         CHECK_EQ(joined(r2), "42 /tmp/r.pdf report");
     }
     {
+        // sendphoto: same shape as sendfile — trailing optional caption.
+        const CommandSpec* sendphoto = by_tool("send_photo");
+        auto r = build_cli_args(*sendphoto, {{"id", "42"}, {"path", "/tmp/p.jpg"}});
+        CHECK_EQ(joined(r), "42 /tmp/p.jpg");
+        auto r2 = build_cli_args(*sendphoto,
+                                 {{"caption", "sunset"}, {"id", "42"}, {"path", "/tmp/p.jpg"}});
+        CHECK_EQ(joined(r2), "42 /tmp/p.jpg sunset");
+    }
+    {
         // search: positional query + optional flags, incl. the pagination cursor.
         const CommandSpec* search = by_tool("search_messages");
         auto r = build_cli_args(*search, {{"query", "deploy"}});
