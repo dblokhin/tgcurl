@@ -49,8 +49,18 @@
 
 # Auth modes run against a throwaway, empty config directory so they never
 # touch a real session and start from a known "no config" state.
+#
+# The scratch dir lives on tmpfs (/dev/shm) when available, NOT in the build
+# tree: login_quiet makes TDLib create its sqlite database there, and that is
+# a burst of fsyncs — instant on tmpfs, but seconds on a real disk and
+# unbounded when the disk is busy (a parallel build once pushed it past the
+# 60s budget and flaked the test). Everything is removed again on success.
 if(MODE MATCHES "^(login_headless|logout_noconfig|status_noconfig|chats_bad_limit|contacts_bad_sub|send_unresolvable|chat_unresolvable|contacts_new_bad|contacts_block_unresolvable|search_unresolvable|sendfile_missing|sendphoto_missing|sendgif_missing|sendlocation_bad|sendpoll_bad|sendchecklist_bad|send_at_bad|read_unresolvable|login_quiet|mcp)$")
-  set(SCRATCH "${CMAKE_CURRENT_BINARY_DIR}/cli_scratch_${MODE}")
+  if(IS_DIRECTORY "/dev/shm")
+    set(SCRATCH "/dev/shm/tgcurl_cli_scratch_${MODE}")
+  else()
+    set(SCRATCH "${CMAKE_CURRENT_BINARY_DIR}/cli_scratch_${MODE}")
+  endif()
   file(REMOVE_RECURSE "${SCRATCH}")
   set(ENV{TGCURL_CONFIG_DIR} "${SCRATCH}")
 endif()
@@ -137,6 +147,18 @@ execute_process(
   OUTPUT_VARIABLE out
   ERROR_VARIABLE err
   TIMEOUT ${RUN_TIMEOUT})
+
+# The assertions below only read the captured variables, so the scratch dir
+# can go now (it must not linger on /dev/shm).
+if(DEFINED SCRATCH)
+  file(REMOVE_RECURSE "${SCRATCH}")
+endif()
+
+# A timeout kills the process silently; every downstream assertion would then
+# fail with a confusing message — name the real problem instead.
+if(code MATCHES "timeout")
+  message(FATAL_ERROR "mode=${MODE}: process ran into the ${RUN_TIMEOUT}s timeout; err=${err}")
+endif()
 
 if(MODE STREQUAL "mcp")
   # Clean shutdown on EOF.
