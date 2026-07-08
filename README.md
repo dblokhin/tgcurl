@@ -1,4 +1,7 @@
-# tgcurl
+# tgcurl - Telegram cli tool 
+
+[![Docker Pulls](https://img.shields.io/docker/pulls/dblokhin/tgcurl)](https://hub.docker.com/r/dblokhin/tgcurl)
+[![Docker Image Size](https://img.shields.io/docker/image-size/dblokhin/tgcurl)](https://hub.docker.com/r/dblokhin/tgcurl)
 
 **`curl` for Telegram.** A deterministic, terminal-only, JSON-only command-line client for a
 **personal Telegram account** (not a bot), built on Telegram's official
