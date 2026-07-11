@@ -182,6 +182,17 @@ foreach(offline_mode sendgif_missing sendlocation_bad sendpoll_bad
       -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_checks.cmake)
 endforeach()
 
+# download: a free-text name -> unresolvable; a non-numeric message_id ->
+# usage. Both before any network.
+foreach(download_mode download_unresolvable download_bad_id)
+  add_test(NAME cli_${download_mode}
+    COMMAND ${CMAKE_COMMAND}
+      -DTGCURL=$<TARGET_FILE:tgcurl>
+      -DMODE=${download_mode}
+      -DCMAKE_CURRENT_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_checks.cmake)
+endforeach()
+
 # read with a free-text name -> unresolvable, before any network.
 add_test(NAME cli_read_unresolvable
   COMMAND ${CMAKE_COMMAND}

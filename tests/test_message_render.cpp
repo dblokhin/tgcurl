@@ -4,6 +4,7 @@
 #include "message_render.h"
 #include "test_util.h"
 
+#include <cstdint>
 #include <string>
 #include <td/telegram/td_api.h>
 #include <utility>
@@ -143,6 +144,56 @@ int main() {
         CHECK(reply_to_message_id(*other) == 0);
 
         CHECK(reply_to_message_id(*base_message()) == 0); // no reply at all
+    }
+
+    // content_file: a document carries its file and original name.
+    {
+        auto content = td_api::make_object<td_api::messageDocument>();
+        content->document_ = td_api::make_object<td_api::document>();
+        content->document_->file_name_ = "report.pdf";
+        content->document_->document_ = td_api::make_object<td_api::file>();
+        content->document_->document_->id_ = 7;
+        std::string name;
+        const td_api::file* file = content_file(content.get(), name);
+        CHECK(file != nullptr);
+        CHECK(file->id_ == 7);
+        CHECK_EQ(name, "report.pdf");
+    }
+
+    // content_file: a photo yields its largest variant (sizes unordered), no name.
+    {
+        auto content = td_api::make_object<td_api::messagePhoto>();
+        content->photo_ = td_api::make_object<td_api::photo>();
+        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+        auto add_size = [&](std::int32_t file_id, std::int32_t w, std::int32_t h) {
+            auto size = td_api::make_object<td_api::photoSize>();
+            size->width_ = w;
+            size->height_ = h;
+            size->photo_ = td_api::make_object<td_api::file>();
+            size->photo_->id_ = file_id;
+            content->photo_->sizes_.push_back(std::move(size));
+        };
+        add_size(1, 1280, 960); // largest first: order must not matter
+        add_size(2, 90, 60);
+        add_size(3, 320, 240);
+        std::string name = "stale";
+        const td_api::file* file = content_file(content.get(), name);
+        CHECK(file != nullptr);
+        CHECK(file->id_ == 1);
+        CHECK_EQ(name, ""); // photos have no file name; stale value cleared
+    }
+
+    // content_file: no-media content (text, poll, null) yields nullptr.
+    {
+        std::string name;
+        auto text = td_api::make_object<td_api::messageText>();
+        text->text_ = ftext("hi");
+        CHECK(content_file(text.get(), name) == nullptr);
+        CHECK(content_file(td_api::make_object<td_api::messagePoll>().get(), name) == nullptr);
+        CHECK(content_file(nullptr, name) == nullptr);
+        // Malformed media (no inner object) degrades to nullptr, not a crash.
+        CHECK(content_file(td_api::make_object<td_api::messageDocument>().get(), name) == nullptr);
+        CHECK(content_file(td_api::make_object<td_api::messagePhoto>().get(), name) == nullptr);
     }
 
     // Sender that is a chat (channel posts).

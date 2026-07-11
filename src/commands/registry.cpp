@@ -22,6 +22,7 @@ std::optional<Error> sendlocation(const Args& args, std::ostream& out);
 std::optional<Error> sendpoll(const Args& args, std::ostream& out);
 std::optional<Error> sendchecklist(const Args& args, std::ostream& out);
 std::optional<Error> search(const Args& args, std::ostream& out);
+std::optional<Error> download(const Args& args, std::ostream& out);
 std::optional<Error> read(const Args& args, std::ostream& out);
 } // namespace commands
 
@@ -260,6 +261,26 @@ std::vector<CommandSpec> make_registry() {
                           "tasks, '|'-separated, at least 1: \"buy milk|call mom\"", ""},
                      }),
                      commands::sendchecklist});
+
+    specs.push_back(
+        {"download",
+         "",
+         "download_file",
+         "Download the media attached to a message (photo, video, document, audio, "
+         "animation, voice/video note, sticker) to local disk; blocks until the file "
+         "is fully downloaded and returns {ok, chat_id, message_id, type, name, size, "
+         "path}. Without output the file stays in tgcurl's cache (which Telegram may "
+         "clean up later); pass output to copy it to a stable path",
+         {
+             {"chat_id", ParamSpec::Type::String, true, kIdDescription, ""},
+             {"message_id", ParamSpec::Type::Integer, true,
+              "message id (from chat_history/search_messages) whose media to download", ""},
+             {"output", ParamSpec::Type::String, false,
+              "destination path to copy the downloaded file to, local to the tgcurl "
+              "process (overwritten if it exists)",
+              "--output"},
+         },
+         commands::download});
 
     specs.push_back({"read",
                      "",

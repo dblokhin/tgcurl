@@ -11,13 +11,13 @@
 #
 # Override defaults on the command line, e.g.:
 #   make build BUILD_TYPE=Debug
-#   make release VERSION=0.2.0
+#   make release VERSION=0.3.0
 
 # ----------------------------------------------------------------------------
 # Configuration
 # ----------------------------------------------------------------------------
 NAME        := tgcurl
-VERSION     ?= 0.2.0
+VERSION     ?= 0.3.0
 BUILD_TYPE  ?= Release
 BUILD_DIR   ?= build
 DIST_DIR    ?= dist

@@ -58,6 +58,7 @@ add_library(tgcurl_td
   src/commands/sendpoll.cpp
   src/commands/sendchecklist.cpp
   src/commands/search.cpp
+  src/commands/download.cpp
   src/commands/read.cpp
 )
 target_link_libraries(tgcurl_td PUBLIC tgcurl_core PRIVATE Td::TdStatic)

@@ -181,6 +181,103 @@ inline std::string message_body(const td::td_api::MessageContent* content) {
     }
 }
 
+namespace detail {
+// The file of the largest photo variant (the size vector is not guaranteed
+// ordered), or nullptr.
+inline const td::td_api::file* largest_photo_file(const td::td_api::photo* photo) {
+    if (photo == nullptr) {
+        return nullptr;
+    }
+    const td::td_api::file* best = nullptr;
+    std::int64_t best_area = -1;
+    for (const auto& size : photo->sizes_) {
+        if (size == nullptr || size->photo_ == nullptr) {
+            continue;
+        }
+        const std::int64_t area =
+            static_cast<std::int64_t>(size->width_) * static_cast<std::int64_t>(size->height_);
+        if (area > best_area) {
+            best_area = area;
+            best = size->photo_.get();
+        }
+    }
+    return best;
+}
+} // namespace detail
+
+// The downloadable file carried by the content — the document/video/audio
+// itself, a photo's largest size, and so on — or nullptr when the content has
+// no file (text, location, poll, ...). `name` receives Telegram's original
+// file name when the media carries one ("" otherwise: photos, voice/video
+// notes and stickers have no file name).
+inline const td::td_api::file* content_file(const td::td_api::MessageContent* content,
+                                            std::string& name) {
+    namespace td_api = td::td_api;
+    name.clear();
+    if (content == nullptr) {
+        return nullptr;
+    }
+    switch (content->get_id()) {
+    case td_api::messagePhoto::ID:
+        return detail::largest_photo_file(
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+            static_cast<const td_api::messagePhoto&>(*content).photo_.get());
+    case td_api::messageVideo::ID: {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+        const auto& video = static_cast<const td_api::messageVideo&>(*content);
+        if (video.video_ == nullptr) {
+            return nullptr;
+        }
+        name = video.video_->file_name_;
+        return video.video_->video_.get();
+    }
+    case td_api::messageDocument::ID: {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+        const auto& doc = static_cast<const td_api::messageDocument&>(*content);
+        if (doc.document_ == nullptr) {
+            return nullptr;
+        }
+        name = doc.document_->file_name_;
+        return doc.document_->document_.get();
+    }
+    case td_api::messageAudio::ID: {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+        const auto& audio = static_cast<const td_api::messageAudio&>(*content);
+        if (audio.audio_ == nullptr) {
+            return nullptr;
+        }
+        name = audio.audio_->file_name_;
+        return audio.audio_->audio_.get();
+    }
+    case td_api::messageAnimation::ID: {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+        const auto& anim = static_cast<const td_api::messageAnimation&>(*content);
+        if (anim.animation_ == nullptr) {
+            return nullptr;
+        }
+        name = anim.animation_->file_name_;
+        return anim.animation_->animation_.get();
+    }
+    case td_api::messageVoiceNote::ID: {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+        const auto& voice = static_cast<const td_api::messageVoiceNote&>(*content);
+        return voice.voice_note_ != nullptr ? voice.voice_note_->voice_.get() : nullptr;
+    }
+    case td_api::messageVideoNote::ID: {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+        const auto& note = static_cast<const td_api::messageVideoNote&>(*content);
+        return note.video_note_ != nullptr ? note.video_note_->video_.get() : nullptr;
+    }
+    case td_api::messageSticker::ID: {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+        const auto& sticker = static_cast<const td_api::messageSticker&>(*content);
+        return sticker.sticker_ != nullptr ? sticker.sticker_->sticker_.get() : nullptr;
+    }
+    default:
+        return nullptr;
+    }
+}
+
 // The same-chat message id this message replies to, or 0.
 inline std::int64_t reply_to_message_id(const td::td_api::message& msg) {
     namespace td_api = td::td_api;

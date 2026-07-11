@@ -75,10 +75,10 @@ or build them yourself (see *Release* below), then:
 
 ```console
 # Fedora / RHEL
-sudo dnf install ./tgcurl-0.2.0.x86_64.rpm
+sudo dnf install ./tgcurl-0.3.0.x86_64.rpm
 
 # Debian / Ubuntu
-sudo apt install ./tgcurl_0.2.0_amd64.deb
+sudo apt install ./tgcurl_0.3.0_amd64.deb
 ```
 
 The packaged binary is self-contained (TDLib, OpenSSL, zlib and the C++ runtime are statically
@@ -204,6 +204,12 @@ $ tgcurl sendchecklist @devteam "Release 0.3" "tag|build|publish"
 $ tgcurl send @devteam "deploy at noon" --silent --at 1783000000
 $ tgcurl sendphoto @devteam ./graph.png --reply-to 184600002560
 
+# Download a message's media (photo/video/document/...; id from `chat` or
+# `search`). Blocks until the file is fully on disk; --output copies it out of
+# tgcurl's cache to a stable path:
+$ tgcurl download @devteam 184600003072 --output ./report.pdf
+{"ok":true,"chat_id":-100123,"message_id":184600003072,"type":"document","name":"report.pdf","size":24576,"path":"./report.pdf"}
+
 # Mark a chat as read (so `chats list --unread` stops reporting it):
 $ tgcurl read -100123
 {"ok":true,"chat_id":-100123,"read_up_to":184600003072}
@@ -269,12 +275,12 @@ to stderr (stdout is reserved for the protocol) and waits for JSON-RPC on stdin:
 
 ```console
 $ tgcurl -mcp
-tgcurl 0.2.0: MCP server ready (stdio transport, JSON-RPC per line); waiting for an MCP client on stdin. Ctrl+C or EOF stops it.
+tgcurl 0.3.0: MCP server ready (stdio transport, JSON-RPC per line); waiting for an MCP client on stdin. Ctrl+C or EOF stops it.
 ```
 
 Exposed tools: `contacts_list`, `contacts_new`, `contacts_block`, `chats_list`,
 `chat_history`, `search_messages`, `send_message`, `send_file`, `send_photo`, `send_gif`,
-`send_location`, `send_poll`, `send_checklist`, `mark_read`. The
+`send_location`, `send_poll`, `send_checklist`, `download_file`, `mark_read`. The
 session-lifecycle commands (`login`, `logout`, `status`) are CLI-only — the session is
 created and managed by a human, agents just use it. Each tool call is the same one-shot
 handler as the CLI subcommand; results and errors carry the same JSON. See DESIGN.md →
@@ -321,7 +327,7 @@ handler as the CLI subcommand; results and errors carry the same JSON. See DESIG
 
 Packaging (`make release`) uses [nfpm](https://nfpm.goreleaser.com/) to emit both `.rpm` and
 `.deb` from the single static binary — no `rpmbuild`/`dpkg` toolchain required. Override the
-version with `make release VERSION=0.2.0`.
+version with `make release VERSION=0.3.0`.
 
 ---
 

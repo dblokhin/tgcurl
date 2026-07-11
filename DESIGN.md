@@ -309,6 +309,7 @@ src/commands/chat.cpp       // history -> JSON
 src/commands/send*.cpp      // the send family, one file per content type: text (send.cpp),
                             //   document, photo, animation, location, poll, checklist
 src/commands/search.cpp     // message search: per-chat / global
+src/commands/download.cpp   // download a message's media (downloadFile synchronous)
 src/commands/read.cpp       // mark a chat as read (viewMessages force_read)
 src/json_out.h              // JSON writer: emit(...) / emit_error(...) + exit code
 src/json_in.h/.cpp          // strict minimal JSON parser (config.json, MCP requests)

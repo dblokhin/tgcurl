@@ -37,6 +37,10 @@
 #   send_at_bad      - `send 42 hi --at abc` -> usage error before any network
 #                      (--at must be a unix time).
 #   read_unresolvable - `read "John Smith"` -> unresolvable before any network.
+#   download_unresolvable - `download "John Smith" 1` -> unresolvable before
+#                      any network.
+#   download_bad_id  - `download 42 abc` -> usage error before any network
+#                      (message_id must be a positive integer).
 #   login_quiet      - `login` with a seeded (fake) config so TdClient is
 #                      constructed and the flow reaches the phone prompt; asserts
 #                      stderr carries NO TDLib logs (they are silenced by
@@ -55,7 +59,7 @@
 # a burst of fsyncs — instant on tmpfs, but seconds on a real disk and
 # unbounded when the disk is busy (a parallel build once pushed it past the
 # 60s budget and flaked the test). Everything is removed again on success.
-if(MODE MATCHES "^(login_headless|logout_noconfig|status_noconfig|chats_bad_limit|contacts_bad_sub|send_unresolvable|chat_unresolvable|contacts_new_bad|contacts_block_unresolvable|search_unresolvable|sendfile_missing|sendphoto_missing|sendgif_missing|sendlocation_bad|sendpoll_bad|sendchecklist_bad|send_at_bad|read_unresolvable|login_quiet|mcp)$")
+if(MODE MATCHES "^(login_headless|logout_noconfig|status_noconfig|chats_bad_limit|contacts_bad_sub|send_unresolvable|chat_unresolvable|contacts_new_bad|contacts_block_unresolvable|search_unresolvable|sendfile_missing|sendphoto_missing|sendgif_missing|sendlocation_bad|sendpoll_bad|sendchecklist_bad|send_at_bad|read_unresolvable|download_unresolvable|download_bad_id|login_quiet|mcp)$")
   if(IS_DIRECTORY "/dev/shm")
     set(SCRATCH "/dev/shm/tgcurl_cli_scratch_${MODE}")
   else()
@@ -110,6 +114,10 @@ elseif(MODE STREQUAL "send_at_bad")
   set(ARGS "send;42;hi;--at;abc")
 elseif(MODE STREQUAL "read_unresolvable")
   set(ARGS "read;John Smith")
+elseif(MODE STREQUAL "download_unresolvable")
+  set(ARGS "download;John Smith;1")
+elseif(MODE STREQUAL "download_bad_id")
+  set(ARGS "download;42;abc")
 elseif(MODE STREQUAL "login_quiet")
   set(ARGS "login")
 elseif(MODE STREQUAL "mcp")
@@ -246,7 +254,7 @@ if(MODE MATCHES "unresolvable")
 endif()
 
 # The offline arg validators fail with "usage" before any session.
-if(MODE MATCHES "^(sendlocation_bad|sendpoll_bad|sendchecklist_bad|send_at_bad)$")
+if(MODE MATCHES "^(sendlocation_bad|sendpoll_bad|sendchecklist_bad|send_at_bad|download_bad_id)$")
   if(NOT err MATCHES "\"usage\"")
     message(FATAL_ERROR "expected a 'usage' error (mode=${MODE}); got: ${err}")
   endif()

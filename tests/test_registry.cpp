@@ -85,7 +85,7 @@ int main() {
             "contacts_list", "contacts_new",  "contacts_block", "chats_list",
             "chat_history",  "search_messages", "send_message", "send_file",
             "send_photo",    "send_gif",      "send_location",  "send_poll",
-            "send_checklist", "mark_read"};
+            "send_checklist", "mark_read",    "download_file"};
         CHECK_EQ(joined_set(tools), joined_set(want_tools));
         // The session-lifecycle commands are CLI-only (empty tool name) — and
         // nothing else is: a new command is agent-facing by default.
@@ -238,6 +238,18 @@ int main() {
         CHECK_EQ(joined(r2), "list --limit 100 --offset 200");
         auto r3 = build_cli_args(*contacts, {});
         CHECK_EQ(joined(r3), "list");
+    }
+
+    {
+        // download: positional id + message_id, optional --output flag.
+        const CommandSpec* dl = by_tool("download_file");
+        auto r = build_cli_args(*dl, {{"chat_id", "42"}, {"message_id", "1846"}});
+        CHECK_EQ(joined(r), "42 1846");
+        auto r2 = build_cli_args(
+            *dl, {{"output", "/tmp/report.pdf"}, {"chat_id", "42"}, {"message_id", "1846"}});
+        CHECK_EQ(joined(r2), "42 1846 --output /tmp/report.pdf");
+        CHECK(input_schema_json(*dl).find("\"message_id\":{\"type\":\"integer\"") !=
+              std::string::npos);
     }
 
     // --- Mapping errors ------------------------------------------------------
