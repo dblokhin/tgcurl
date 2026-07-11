@@ -38,51 +38,19 @@ $ tgcurl send 123456789 "deploy finished ✅"
 
 ### Docker (recommended)
 
-No toolchain, no TDLib hunting: the image installs TDLib as a **prebuilt, version-pinned
-RPM**, so `docker build` takes minutes. All state (api_id/api_hash + the Telegram session)
-lives in the `tgcurl-data` **volume** — log in once, then run the container as many times as
-you like: the session survives restarts, `--rm`, and image rebuilds.
+Ready-made images and full instructions (volumes, MCP registration, host-dir setup) live on
+**[Docker Hub → dblokhin/tgcurl](https://hub.docker.com/r/dblokhin/tgcurl)**. In short:
 
 ```console
-# Build the image:
-$ docker build -t tgcurl .
+# Log in once (interactive; the session persists in the tgcurl-data volume):
+$ docker run -it --rm -v tgcurl-data:/data dblokhin/tgcurl login
 
-# 1. REQUIRED FIRST: authorize once, interactively (-it). Writes the session
-#    into the tgcurl-data volume; prompts for api_id/api_hash, phone, code.
-$ docker run -it --rm -v tgcurl-data:/data tgcurl login
+# Then any command, no more prompts:
+$ docker run --rm -v tgcurl-data:/data dblokhin/tgcurl send <chat_id> "hi from docker"
 
-# 2. From now on — any command, same volume, no more prompts ever:
-$ docker run --rm -v tgcurl-data:/data tgcurl status
-{"authorized":true,"user":{...}}
-$ docker run --rm -v tgcurl-data:/data tgcurl send <chat_id> "hi from docker"
+# MCP for Claude Code (-i: MCP speaks over stdin/stdout):
+$ claude mcp add telegram -- docker run -i --rm -v tgcurl-data:/data dblokhin/tgcurl -mcp
 ```
-
-**MCP for Claude** — after step 1, register the dockerized server (note `-i`: MCP speaks over
-stdin/stdout):
-
-```console
-$ claude mcp add telegram -- docker run -i --rm -v tgcurl-data:/data tgcurl -mcp
-```
-
-Claude Code will launch the container itself and get all tgcurl tools (send, search, history,
-files, …). To use a host directory instead of the named volume: `-v ~/tgcurl-data:/data`
-(create it with `chown 1000` + `chmod 700` first — the container runs unprivileged).
-
-### From a package
-
-Download the `.rpm` or `.deb` from the [releases page](https://github.com/dblokhin/tgcurl/releases),
-or build them yourself (see *Release* below), then:
-
-```console
-# Fedora / RHEL
-sudo dnf install ./tgcurl-0.3.0.x86_64.rpm
-
-# Debian / Ubuntu
-sudo apt install ./tgcurl_0.3.0_amd64.deb
-```
-
-The packaged binary is self-contained (TDLib, OpenSSL, zlib and the C++ runtime are statically
-linked); the only runtime dependency is the system glibc, which every supported distro ships.
 
 ### Build from source
 
