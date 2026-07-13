@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <cstdlib>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -118,7 +119,9 @@ Object TdClient::await_response(std::uint64_t request_id, double timeout_seconds
             return std::move(response.object);
         }
         if (response.request_id == 0) {
-            // An update; hand it to the observer if one is registered.
+            // An update; note client-level state, then hand it to the
+            // observer if one is registered.
+            observe_update(response.object);
             if (update_handler_) {
                 update_handler_(std::move(response.object));
             }
@@ -135,6 +138,7 @@ bool TdClient::pump_updates(double timeout_seconds) {
         return false;
     }
     if (response.request_id == 0) {
+        observe_update(response.object);
         if (update_handler_) {
             update_handler_(std::move(response.object));
         }
@@ -142,6 +146,38 @@ bool TdClient::pump_updates(double timeout_seconds) {
     }
     // A stray response with no waiter; nothing to do with it here.
     return false;
+}
+
+void TdClient::observe_update(const Object& update) {
+    if (std::optional<bool> ready = connection_ready_from_update(update); ready.has_value()) {
+        connection_ready_ = *ready;
+    }
+}
+
+bool TdClient::wait_connection_ready(double timeout_seconds) {
+    // Same wall-clock deadline discipline as await_response: a steady stream
+    // of unrelated updates must not extend the wait indefinitely.
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::duration<double>(timeout_seconds);
+    while (!connection_ready_) {
+        const double remaining =
+            std::chrono::duration<double>(deadline - std::chrono::steady_clock::now()).count();
+        if (remaining <= 0.0) {
+            return false;
+        }
+        pump_updates(remaining);
+    }
+    return true;
+}
+
+std::optional<bool> connection_ready_from_update(const Object& update) {
+    if (update == nullptr || update->get_id() != td_api::updateConnectionState::ID) {
+        return std::nullopt;
+    }
+    // Safe downcast: get_id() already confirmed the dynamic type.
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+    const auto& upd = static_cast<const td_api::updateConnectionState&>(*update);
+    return upd.state_ != nullptr && upd.state_->get_id() == td_api::connectionStateReady::ID;
 }
 
 bool is_error(const Object& obj) {

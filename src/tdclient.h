@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <td/telegram/Client.h>
 #include <td/telegram/td_api.h>
@@ -56,14 +57,34 @@ class TdClient {
     // drain any further updates.
     bool pump_updates(double timeout_seconds);
 
+    // Whether the last updateConnectionState seen was connectionStateReady —
+    // TDLib's "missed updates downloaded and applied" signal. Until then,
+    // cache-answered requests (getChat, getChatHistory, ...) may reflect the
+    // state of the previous run and silently miss the newest messages.
+    [[nodiscard]] bool connection_ready() const { return connection_ready_; }
+
+    // Pump updates until connection_ready() (true) or the timeout elapses
+    // (false). Call after authentication, before a cache-answered read whose
+    // point is current server state.
+    bool wait_connection_ready(double timeout_seconds);
+
   private:
     Object await_response(std::uint64_t request_id, double timeout_seconds);
+    // Inspect an incoming update for client-level state (connection state)
+    // before it is handed to the registered update handler.
+    void observe_update(const Object& update);
 
     std::unique_ptr<td::ClientManager> manager_;
     std::int32_t client_id_ = 0;
     std::uint64_t next_request_id_ = 1;
     UpdateHandler update_handler_;
+    bool connection_ready_ = false;
 };
+
+// If `update` is an updateConnectionState: whether the new state is
+// connectionStateReady. std::nullopt for any other (or null) object. Pure —
+// unit-tested; TdClient::observe_update is a thin wrapper over this.
+[[nodiscard]] std::optional<bool> connection_ready_from_update(const Object& update);
 
 // True if the object is a td_api::error.
 [[nodiscard]] bool is_error(const Object& obj);

@@ -4,6 +4,7 @@
 #include "tdclient.h"
 #include "test_util.h"
 
+#include <optional>
 #include <td/telegram/td_api.h>
 
 using namespace tgcurl;
@@ -50,8 +51,39 @@ int main() {
         CHECK_EQ(primary_username(u), "myself");
     }
 
-    // A client can be constructed and destroyed without touching the network.
-    { TdClient client; }
+    // connection_ready_from_update: recognizes TDLib's "missed updates
+    // applied" signal (the class-3 stale-read guard, DESIGN.md → Asynchrony).
+    {
+        Object ready = td_api::make_object<td_api::updateConnectionState>(
+            td_api::make_object<td_api::connectionStateReady>());
+        CHECK(connection_ready_from_update(ready) == std::optional<bool>(true));
+    }
+    // Any non-ready connection state — including Updating, the "still
+    // downloading offline-time updates" window a read must not run in.
+    {
+        Object updating = td_api::make_object<td_api::updateConnectionState>(
+            td_api::make_object<td_api::connectionStateUpdating>());
+        CHECK(connection_ready_from_update(updating) == std::optional<bool>(false));
+    }
+    // A state-less update object (defensive) is "not ready", not a crash.
+    {
+        Object hollow = td_api::make_object<td_api::updateConnectionState>(nullptr);
+        CHECK(connection_ready_from_update(hollow) == std::optional<bool>(false));
+    }
+    // Unrelated and null objects say nothing about the connection.
+    {
+        Object ok = td_api::make_object<td_api::ok>();
+        CHECK(!connection_ready_from_update(ok).has_value());
+        Object none;
+        CHECK(!connection_ready_from_update(none).has_value());
+    }
+
+    // A client can be constructed and destroyed without touching the network;
+    // it starts out not connection-ready (no update seen yet).
+    {
+        TdClient client;
+        CHECK(!client.connection_ready());
+    }
 
     RETURN_TEST_RESULT();
 }

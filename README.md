@@ -243,7 +243,7 @@ to stderr (stdout is reserved for the protocol) and waits for JSON-RPC on stdin:
 
 ```console
 $ tgcurl -mcp
-tgcurl 0.3.0: MCP server ready (stdio transport, JSON-RPC per line); waiting for an MCP client on stdin. Ctrl+C or EOF stops it.
+tgcurl 0.4.0: MCP server ready (stdio transport, JSON-RPC per line); waiting for an MCP client on stdin. Ctrl+C or EOF stops it.
 ```
 
 Exposed tools: `contacts_list`, `contacts_new`, `contacts_block`, `chats_list`,
@@ -295,7 +295,7 @@ handler as the CLI subcommand; results and errors carry the same JSON. See DESIG
 
 Packaging (`make release`) uses [nfpm](https://nfpm.goreleaser.com/) to emit both `.rpm` and
 `.deb` from the single static binary — no `rpmbuild`/`dpkg` toolchain required. Override the
-version with `make release VERSION=0.3.0`.
+version with `make release VERSION=0.4.0`.
 
 ---
 

@@ -38,6 +38,7 @@ namespace {
 
 constexpr int kDefaultLast = 20;
 constexpr int kMaxLast = 100;
+constexpr double kSyncTimeoutSeconds = 30.0;
 
 // Parse `chat "<id>" [--last N] [--before <message_id>] [--all]`.
 struct ChatArgs {
@@ -124,6 +125,17 @@ std::optional<Error> chat(const Args& args, std::ostream& out) {
         return std::get<Error>(resolved);
     }
     const std::int64_t chat_id = std::get<std::int64_t>(resolved);
+
+    // getChat and getChatHistory are answered from TDLib's local cache when it
+    // has the data — including *before* TDLib has finished downloading the
+    // updates it missed while this process was offline. In that window the
+    // reply is fast, well-formed, and stale: the newest messages are silently
+    // absent. connectionStateReady is the "missed updates applied" signal, so
+    // require it before reading (DESIGN.md → Asynchrony discipline, class 3).
+    if (!client.wait_connection_ready(kSyncTimeoutSeconds)) {
+        return Error("request_failed", "timed out waiting for TDLib to sync with the server "
+                                       "(connectionStateReady); history could be stale");
+    }
 
     // Prime the chat so history is available; the id was already validated by
     // resolve, so a getChat error here is a real failure.

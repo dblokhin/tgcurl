@@ -65,7 +65,7 @@ The rule every command (current and future) must obey: **a command may not repor
 exit until TDLib has confirmed the effect it claims** — because tgcurl is one-shot, process
 exit destroys any work TDLib still has queued.
 
-TDLib requests fall into two classes:
+TDLib requests fall into three classes:
 
 1. **Round-trip requests** (`getContacts`, `importContacts`, `searchPublicChat`,
    `setMessageSenderBlockList`, …): the response itself is the server's answer. `send_query()`
@@ -78,6 +78,16 @@ TDLib requests fall into two classes:
    drops the message** (this was a real bug). Such commands must pump updates until the
    terminal update for *their* request arrives (bounded by a timeout), and only then print
    `{"ok":true}`.
+3. **Cache-answered requests** — `getChat`, `getChatHistory`, …: TDLib answers from its local
+   database when it can, *including before it has finished downloading the updates it missed
+   while the process was offline* (a warm session reaches `authorizationStateReady` instantly
+   from disk, well before the network sync). In that window the response is fast, well-formed,
+   and stale — a `chat` read can silently miss the newest messages (this was a real bug, the
+   read-side twin of class 2). Commands whose point is *current server state* must first wait
+   for `updateConnectionState` → `connectionStateReady` — TDLib's "missed updates applied"
+   signal (`connectionStateUpdating` is exactly "downloading data received while offline") —
+   via `TdClient::wait_connection_ready()`, bounded, failing `request_failed` on timeout
+   rather than returning possibly-stale data. `chat` does this before `getChatHistory`.
 
 How this is kept from regressing:
 
